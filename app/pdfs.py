@@ -128,13 +128,23 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
         t = Table(data, hAlign="LEFT", colWidths=[90 * mm, 25 * mm, 30 * mm])
         t.setStyle(table_style)
         story.append(t)
-        if r["tie"]:
-            outcome = "Stimmengleichheit zwischen: " + ", ".join(c.name for c in r["leaders"])
-        elif r["leaders"]:
-            outcome = f"Gewählt: {r['leaders'][0].name}"
-        else:
-            outcome = "Kein Ergebnis (keine gültigen Stimmen)"
-        story.append(Paragraph(f"<b>{escape(outcome)}</b>", styles["Normal"]))
+        names = lambda cs: ", ".join(c.name for c in cs)  # noqa: E731
+        lines = []
+        if r["winner"]:
+            label = "Gewählt als Stellvertreter/in" if r["race"].runoff_kind == "deputy" else "Gewählt"
+            lines.append(f"{label}: {r['winner'].name}")
+        if r["runoff_first"]:
+            lines.append(f"Stimmengleichheit um Platz 1 zwischen: {names(r['runoff_first'])} – Stichwahl nötig")
+        if r["deputy"]:
+            lines.append(f"Stellvertreter/in: {r['deputy'].name}")
+        elif r["runoff_second"]:
+            lines.append(f"Stimmengleichheit um Platz 2 zwischen: {names(r['runoff_second'])} – Stichwahl nötig")
+        elif r["deputy_pending"]:
+            lines.append("Stellvertretung ergibt sich nach der Stichwahl.")
+        if not lines:
+            lines.append("Kein Ergebnis (keine gültigen Stimmen)")
+        for line in lines:
+            story.append(Paragraph(f"<b>{escape(line)}</b>", styles["Normal"]))
         if not r["consistent"]:
             story.append(Paragraph(
                 f"<font color='red'>ACHTUNG: {r['total']} Stimmen, aber {r['expected']} verbrauchte Codes.</font>",

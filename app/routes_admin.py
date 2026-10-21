@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -110,7 +111,8 @@ def create(request: Request, form=Depends(admin_form), db: Session = Depends(get
         return render(request, "admin_new.html", 400, error=error, start=form.get("start_at", ""),
                       end=form.get("end_at", ""))
 
-    e = Election(name=name, start_at=start, end_at=end)
+    e = Election(name=name, start_at=start, end_at=end,
+                 code_mode="class" if form.get("code_mode") == "class" else "department")
     e.departments = [Department(name=n) for n in dept_names]
     db.add(e)
     db.flush()
@@ -396,21 +398,44 @@ def settings_save(request: Request, form=Depends(admin_form), db: Session = Depe
 # ------------------------------------------------------------ Codes
 
 @router.get("/elections/{election_id}/codes")
-def codes_page(request: Request, election_id: int, department_id: int | None = None, state: str = "all",
+def codes_page(request: Request, election_id: int, department_id: int | None = None, group_name: str = "",
+               state: str = "all",
                db: Session = Depends(get_db), _=Depends(require_admin)):
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if department_id:
         q = q.where(Code.department_id == department_id)
+    if group_name:
+        q = q.where(Code.group_name == group_name)
     if state == "unused":
         q = q.where(Code.used.is_(False))
     elif state == "used":
         q = q.where(Code.used.is_(True))
     codes = db.scalars(q).all()
-    codes.sort(key=lambda c: (c.department.name, c.code))
+    codes.sort(key=lambda c: (c.department.name, c.group_name, c.code))
     return render(request, "admin_codes.html", e=e, status=election_status(e), part=participation(db, e),
-                  codes=codes, department_id=department_id, state=state, tab="codes",
+                  codes=codes, department_id=department_id, group_name=group_name, state=state, tab="codes",
                   default_base=config.PUBLIC_URL or str(request.base_url).rstrip("/"))
+
+
+@router.post("/elections/{election_id}/codes/delete-unused")
+def delete_unused_codes(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    """Löscht alle noch nicht verwendeten Codes einer Abteilung (und optional einer Klasse)."""
+    e = get_election(db, election_id)
+    if election_status(e) == "ended":
+        flash(request, "Die Wahl ist beendet.", "error")
+        return go(f"/admin/elections/{e.id}/codes")
+    dept_raw = str(form.get("department_id", ""))
+    if not dept_raw.isdigit() or int(dept_raw) not in {d.id for d in e.departments}:
+        raise HTTPException(400, "Unbekannte Abteilung")
+    q = sa_delete(Code).where(Code.election_id == e.id, Code.department_id == int(dept_raw), Code.used.is_(False))
+    group = str(form.get("group_name", "")).strip()
+    if group:
+        q = q.where(Code.group_name == group)
+    n = db.execute(q).rowcount
+    db.commit()
+    flash(request, f"{n} offene Codes gelöscht. Bereits verwendete Codes bleiben bestehen.")
+    return go(f"/admin/elections/{e.id}/codes")
 
 
 @router.post("/codes/{code_id}/delete")
@@ -442,31 +467,77 @@ def make_codes(request: Request, election_id: int, form=Depends(admin_form), db:
     if dept is None or not 1 <= count <= 2000:
         flash(request, "Bitte Abteilung und eine Anzahl zwischen 1 und 2000 angeben.", "error")
         return go(f"/admin/elections/{e.id}/codes")
-    batch = generate_codes(db, e, dept, count)
+    group = str(form.get("group_name", "")).strip()[:100] if e.code_mode == "class" else ""
+    if e.code_mode == "class" and not group:
+        flash(request, "Bitte die Klasse angeben (z. B. 5AHD).", "error")
+        return go(f"/admin/elections/{e.id}/codes")
+    batch = generate_codes(db, e, dept, count, group)
     base = str(form.get("base_url", "")).strip().rstrip("/")
-    flash(request, f"{count} Codes für {dept.name} erzeugt. Das PDF wird heruntergeladen.")
+    flash(request, f"{count} Codes für {dept.name}{' · ' + group if group else ''} erzeugt. Das PDF wird geöffnet.")
     from urllib.parse import quote
     return go(f"/admin/elections/{e.id}/codes.pdf?batch={batch}&base_url={quote(base, safe='')}")
 
 
 @router.get("/elections/{election_id}/codes.pdf")
 def codes_download(election_id: int, request: Request, batch: str = "", department_id: int | None = None,
-                   unused: int = 1, base_url: str = "", db: Session = Depends(get_db), _=Depends(require_admin)):
+                   group_name: str = "", unused: int = 1, base_url: str = "", db: Session = Depends(get_db),
+                   _=Depends(require_admin)):
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if batch:
         q = q.where(Code.batch == batch)
     if department_id:
         q = q.where(Code.department_id == department_id)
+    if group_name:
+        q = q.where(Code.group_name == group_name)
     if unused:
         q = q.where(Code.used.is_(False))
     codes = db.scalars(q).all()
-    codes.sort(key=lambda c: (c.department.name, c.code))
+    codes.sort(key=lambda c: (c.department.name, c.group_name, c.code))
     base = (base_url or config.PUBLIC_URL or str(request.base_url)).rstrip("/")
-    pdf = codes_pdf(e.name, [(c.department.name, c.code) for c in codes], base)
+    pdf = codes_pdf(e.name, [(c.department.name + (f" · {c.group_name}" if c.group_name else ""), c.code)
+                             for c in codes], base)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="wahlcodes-{e.id}.pdf"',
                              "Cache-Control": "no-store"})
+
+
+# ------------------------------------------------------------ Stichwahl
+
+@router.post("/elections/{election_id}/runoff")
+def create_runoff(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    """Legt bei Stimmengleichheit eine Stichwahl als neue (geplante) Wahl an."""
+    e = get_election(db, election_id)
+    if election_status(e) != "ended":
+        flash(request, "Eine Stichwahl kann erst nach Ende der Wahl angelegt werden.", "error")
+        return go(f"/admin/elections/{e.id}/dashboard")
+    kind = "deputy" if form.get("kind") == "deputy" else "speaker"
+    result = next((r for r in compute_results(db, e) if str(r["race"].id) == str(form.get("race_id"))), None)
+    tied = (result or {}).get("runoff_second" if kind == "deputy" else "runoff_first") or []
+    if not tied:
+        flash(request, "Für diesen Wahlgang ist keine Stichwahl nötig.", "error")
+        return go(f"/admin/elections/{e.id}/dashboard")
+    race = result["race"]
+    suffix = f" – {race.department.name}" if race.department else ""
+    start = utcnow() + timedelta(hours=1)
+    new = Election(name=f"Stichwahl {race.title}{suffix} ({e.name})", start_at=start, end_at=start + timedelta(hours=8),
+                   code_mode=e.code_mode)
+    depts = [d for d in e.departments if race.department_id in (None, d.id)]
+    new.departments = [Department(name=d.name) for d in depts]
+    db.add(new)
+    db.flush()
+    new_race = Race(election_id=new.id, title=f"Stichwahl {race.title}", runoff_kind=kind, position=0)
+    new.races.append(new_race)
+    db.flush()
+    for c in tied:
+        copy = Candidate(race_id=new_race.id, name=c.name, info=c.info)
+        if c.image_id:
+            src = db.get(Image, c.image_id)
+            copy.image_id = _store_image(db, (src.data, src.content_type))
+        db.add(copy)
+    db.commit()
+    flash(request, "Stichwahl angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")
+    return go(f"/admin/elections/{new.id}")
 
 
 # ------------------------------------------------------------ Dashboard & Exporte

@@ -45,7 +45,7 @@ def normalize_code(raw: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
 
 
-def generate_codes(db: Session, election: Election, department: Department, count: int) -> str:
+def generate_codes(db: Session, election: Election, department: Department, count: int, group_name: str = "") -> str:
     """Erzeugt `count` neue, eindeutige Codes. Gibt die Batch-ID zurück."""
     batch = uuid.uuid4().hex[:16]
     existing = set(db.scalars(select(Code.code)))
@@ -56,7 +56,8 @@ def generate_codes(db: Session, election: Election, department: Department, coun
             existing.add(c)
             new.append(c)
     db.add_all(
-        Code(election_id=election.id, department_id=department.id, code=c, batch=batch) for c in new
+        Code(election_id=election.id, department_id=department.id, code=c, batch=batch, group_name=group_name)
+        for c in new
     )
     db.commit()
     return batch
@@ -142,22 +143,67 @@ def participation(db: Session, election: Election) -> dict:
     rows = db.execute(
         select(
             Code.department_id,
+            Code.group_name,
             func.count(Code.id),
             func.coalesce(func.sum(case((Code.used.is_(True), 1), else_=0)), 0),
         )
         .where(Code.election_id == election.id)
-        .group_by(Code.department_id)
+        .group_by(Code.department_id, Code.group_name)
     ).all()
-    by_dept = {d: (int(total), int(used)) for d, total, used in rows}
+
+    def pct(used, total):
+        return round(100 * used / total, 1) if total else 0.0
+
+    by_dept: dict[int, list[int]] = {}
+    groups = []
+    names = {d.id: d.name for d in election.departments}
+    for dept_id, group, total, used in rows:
+        t = by_dept.setdefault(dept_id, [0, 0])
+        t[0] += int(total)
+        t[1] += int(used)
+        if group:
+            groups.append({"department_id": dept_id, "department": names.get(dept_id, ""), "name": group,
+                           "total": int(total), "used": int(used), "percent": pct(int(used), int(total))})
+    groups.sort(key=lambda g: (g["department"], g["name"]))
     departments = []
     for dept in election.departments:
         total, used = by_dept.get(dept.id, (0, 0))
-        departments.append({"id": dept.id, "name": dept.name, "total": total, "used": used,
-                            "percent": round(100 * used / total, 1) if total else 0.0})
+        departments.append({"id": dept.id, "name": dept.name, "total": total, "used": used, "percent": pct(used, total),
+                            "groups": [g for g in groups if g["department_id"] == dept.id]})
     total = sum(d["total"] for d in departments)
     used = sum(d["used"] for d in departments)
-    return {"departments": departments, "total": total, "used": used,
-            "percent": round(100 * used / total, 1) if total else 0.0}
+    return {"departments": departments, "groups": groups, "total": total, "used": used, "percent": pct(used, total)}
+
+
+def decide(rows: list[dict], runoff_kind: str = "") -> dict:
+    """Platz 1 = Sprecher/in, Platz 2 = Stellvertreter/in. Eine Stichwahl ist nur bei Gleichstand nötig.
+
+    Nur Kandidat/innen mit mindestens einer Stimme können einen Platz bekommen.
+    """
+    by_votes: dict[int, list] = {}
+    for r in rows:
+        if r["votes"] > 0:
+            by_votes.setdefault(r["votes"], []).append(r["candidate"])
+    ordered = [by_votes[v] for v in sorted(by_votes, reverse=True)]
+    out = {"winner": None, "deputy": None, "runoff_first": [], "runoff_second": [], "deputy_pending": False,
+           "leaders": ordered[0] if ordered else []}
+    if not ordered:
+        return out
+    first = ordered[0]
+    if len(first) > 1:
+        out["runoff_first"] = first
+        out["deputy_pending"] = runoff_kind != "deputy"  # Stellvertretung ergibt sich nach der Stichwahl
+        return out
+    out["winner"] = first[0]
+    if runoff_kind == "deputy":
+        return out  # bei einer Stichwahl um die Stellvertretung wird nur ein Platz vergeben
+    if len(ordered) > 1:
+        second = ordered[1]
+        if len(second) == 1:
+            out["deputy"] = second[0]
+        else:
+            out["runoff_second"] = second
+    return out
 
 
 def compute_results(db: Session, election: Election) -> list[dict]:
@@ -189,8 +235,7 @@ def compute_results(db: Session, election: Election) -> list[dict]:
         invalid = counts.get((race.id, None), 0)
         for r in rows:
             r["percent"] = round(100 * r["votes"] / valid, 1) if valid else 0.0
-        top = rows[0]["votes"] if rows else 0
-        leaders = [r["candidate"] for r in rows if r["votes"] == top] if top > 0 else []
+        decision = decide(rows, race.runoff_kind)
         expected = part["used"] if race.department_id is None else used_by_dept.get(race.department_id, 0)
         results.append({
             "race": race,
@@ -201,8 +246,8 @@ def compute_results(db: Session, election: Election) -> list[dict]:
             "total": valid + invalid,
             "expected": expected,
             "consistent": valid + invalid == expected,
-            "leaders": leaders,
-            "tie": len(leaders) > 1,
+            "tie": len(decision["leaders"]) > 1,
+            **decision,
         })
     return results
 

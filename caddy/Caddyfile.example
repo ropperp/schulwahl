@@ -1,0 +1,14 @@
+# Wird von setup.sh nach caddy/Caddyfile kopiert und angepasst.
+#
+# Mit echter Domain (Let's Encrypt, automatisches Zertifikat):
+#   wahl.meineschule.at {
+#       encode gzip
+#       reverse_proxy app:8000
+#   }
+#
+# Ohne Domain, nur im Schulnetz (selbstsigniertes Zertifikat, Browser zeigt eine Warnung):
+#   :443 {
+#       tls internal
+#       encode gzip
+#       reverse_proxy app:8000
+#   }

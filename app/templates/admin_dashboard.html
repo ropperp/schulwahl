@@ -25,7 +25,7 @@
 {{ participation_block(part) }}
 
 {% if results is not none %}
-{{ results_block(results) }}
+{{ results_block(results, e, csrf(request)) }}
 {% else %}
 <section class="card"><p class="muted">🔒 Die Ergebnisse werden erst angezeigt, wenn die Wahl beendet ist{% if status == 'planned' %} (sie hat noch nicht begonnen){% endif %}.</p></section>
 {% endif %}

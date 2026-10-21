@@ -33,9 +33,18 @@ def init_db(retries: int = 30) -> None:
             time.sleep(1)
 
 
+_NEW_COLUMNS = [
+    ("candidates", "image_id", "INTEGER REFERENCES images(id)"),
+    ("elections", "code_mode", "VARCHAR(20) NOT NULL DEFAULT 'department'"),
+    ("races", "runoff_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("codes", "group_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
+]
+
+
 def _migrate() -> None:
     """Ergänzt Spalten, die in älteren Versionen noch fehlten (create_all ändert keine bestehenden Tabellen)."""
-    cols = {c["name"] for c in inspect(engine).get_columns("candidates")}
-    if "image_id" not in cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE candidates ADD COLUMN image_id INTEGER REFERENCES images(id)"))
+    insp = inspect(engine)
+    for table, column, ddl in _NEW_COLUMNS:
+        if column not in {c["name"] for c in insp.get_columns(table)}:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))

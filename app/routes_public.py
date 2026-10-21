@@ -1,6 +1,7 @@
 """Öffentliche Ergebnisseite - nur wenn der Admin das Ergebnis veröffentlicht hat."""
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import get_db
@@ -37,3 +38,13 @@ def logo(db: Session = Depends(get_db)):
 def candidate_photo(candidate_id: int, db: Session = Depends(get_db)):
     cand = db.get(Candidate, candidate_id)
     return _image_response(db, cand.image_id if cand else None)
+
+
+@router.get("/vergangene")
+def past_elections(request: Request, db: Session = Depends(get_db)):
+    """Archiv: alle veröffentlichten, beendeten Wahlen mit Gewählten."""
+    elections = [e for e in db.scalars(select(Election).where(Election.results_public.is_(True))
+                                       .order_by(Election.start_at.desc()))
+                 if election_status(e) == "ended"]
+    items = [{"e": e, "results": compute_results(db, e)} for e in elections]
+    return render(request, "past.html", items=items)

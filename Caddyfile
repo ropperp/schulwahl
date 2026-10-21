@@ -1,8 +1,0 @@
-# Nur relevant für: docker compose --profile https up -d
-# SITE_ADDRESS aus der .env: z. B. "wahl.meineschule.at" (echtes Zertifikat per Let's Encrypt,
-# dafür "tls internal" unten entfernen) oder "localhost" / eine IP (selbstsigniertes Zertifikat).
-{$SITE_ADDRESS:localhost} {
-	tls internal
-	encode gzip
-	reverse_proxy app:8000
-}

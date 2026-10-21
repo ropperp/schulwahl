@@ -33,22 +33,21 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-0}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
     ports:
-      - "${PORT:-8080}:8000"
+      # Im HTTPS-Betrieb setzt setup.sh APP_BIND=127.0.0.1, dann ist nur Caddy von außen erreichbar.
+      - "${APP_BIND:-0.0.0.0}:${PORT:-8080}:8000"
 
-  # Optional: HTTPS-Proxy. Start mit:  docker compose --profile https up -d
+  # Optional: HTTPS-Proxy (wird von setup.sh bei Bedarf mitgestartet)
   caddy:
     image: caddy:2-alpine
     profiles: ["https"]
     restart: unless-stopped
     depends_on:
       - app
-    environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
 

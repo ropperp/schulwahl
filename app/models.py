@@ -24,6 +24,8 @@ class Election(Base):
     end_at: Mapped[datetime] = mapped_column(DateTime)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     results_public: Mapped[bool] = mapped_column(Boolean, default=False)
+    # "department": Codes pro Abteilung (datensparsam). "class": Codes pro Klasse (Beteiligung je Klasse sichtbar)
+    code_mode: Mapped[str] = mapped_column(String(20), default="department", server_default="department")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     departments: Mapped[list["Department"]] = relationship(
@@ -55,6 +57,8 @@ class Race(Base):
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), default=None)
     title: Mapped[str] = mapped_column(String(200))
     position: Mapped[int] = mapped_column(Integer, default=0)
+    # Stichwahl: "" = normaler Wahlgang, "speaker" = Stichwahl um Platz 1, "deputy" = Stichwahl um die Stellvertretung
+    runoff_kind: Mapped[str] = mapped_column(String(20), default="", server_default="")
 
     election: Mapped[Election] = relationship(back_populates="races")
     department: Mapped[Department | None] = relationship()
@@ -85,6 +89,7 @@ class Code(Base):
     code: Mapped[str] = mapped_column(String(12), unique=True, index=True)
     used: Mapped[bool] = mapped_column(Boolean, default=False)
     batch: Mapped[str] = mapped_column(String(32), default="", index=True)
+    group_name: Mapped[str] = mapped_column(String(100), default="", server_default="")  # Klasse (nur Modus "class")
 
     department: Mapped[Department] = relationship()
 

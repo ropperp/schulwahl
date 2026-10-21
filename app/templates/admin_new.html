@@ -17,6 +17,11 @@
     <textarea id="departments" name="departments" rows="4" required>Elektrotechnik
 Mechatronik
 Maschinenbau</textarea>
+    <label>Wie sollen die Codes verteilt werden?</label>
+    <label class="mode"><input type="radio" name="code_mode" value="department" checked>
+      <span><strong>Pro Abteilung</strong> (empfohlen)<br><span class="muted small">Codes gehören nur zu einer Abteilung, z. B. 250 für Elektrotechnik. Es ist nicht erkennbar, aus welcher Klasse eine Stimme kommt – datensparsam.</span></span></label>
+    <label class="mode"><input type="radio" name="code_mode" value="class">
+      <span><strong>Pro Klasse</strong><br><span class="muted small">Beim Erzeugen gibst du die Klasse an (z. B. 5AHD, 22 Codes). Das Dashboard zeigt dann auch die Beteiligung je Klasse.</span></span></label>
     <label class="check"><input type="checkbox" name="standard_races" value="1" checked>
       Standard-Wahlgänge anlegen (Schulsprecher/in für alle + Abteilungssprecher/in je Abteilung)</label>
     <button class="btn primary big" type="submit">Wahl anlegen</button>
