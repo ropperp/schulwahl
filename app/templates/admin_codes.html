@@ -1,0 +1,63 @@
+{% extends "admin_base.html" %}
+{% block title %}Codes · {{ e.name }}{% endblock %}
+{% block content %}
+{% include "_election_nav.html" %}
+
+{% if status != 'ended' %}
+<section class="card">
+  <h2>Codes erzeugen</h2>
+  <form method="post" action="/admin/elections/{{ e.id }}/codes">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <div class="grid3">
+      <div><label for="department_id">Abteilung</label>
+        <select id="department_id" name="department_id">{% for d in e.departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
+      <div><label for="count">Anzahl</label><input id="count" name="count" type="number" min="1" max="2000" value="200" required></div>
+      <div><label for="base_url">Adresse im QR-Code</label><input id="base_url" name="base_url" value="{{ default_base }}" required></div>
+    </div>
+    <p class="muted small">Die Adresse muss genau die sein, unter der die Handys den Server erreichen (z. B. http://192.168.1.50:8080). Danach öffnet sich ein druckfertiges PDF (24 Zettel pro A4-Seite).</p>
+    <button class="btn primary">Codes erzeugen &amp; PDF öffnen</button>
+  </form>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Übersicht</h2>
+  <table class="plain">
+    <tr><th>Abteilung</th><th class="num">Erzeugt</th><th class="num">Verwendet</th><th class="num">Offen</th><th></th></tr>
+    {% for d in part.departments %}
+    <tr><td>{{ d.name }}</td><td class="num">{{ d.total }}</td><td class="num">{{ d.used }}</td><td class="num">{{ d.total - d.used }}</td>
+      <td class="num"><a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;unused=1&amp;base_url={{ default_base|urlencode }}" target="_blank">Offene als PDF</a></td></tr>
+    {% endfor %}
+  </table>
+</section>
+
+<section class="card">
+  <h2>Code-Liste</h2>
+  <form method="get" class="row gap wrap filter">
+    <select name="department_id" aria-label="Abteilung">
+      <option value="">alle Abteilungen</option>
+      {% for d in e.departments %}<option value="{{ d.id }}" {{ 'selected' if department_id == d.id }}>{{ d.name }}</option>{% endfor %}
+    </select>
+    <select name="state" aria-label="Status">
+      <option value="all" {{ 'selected' if state == 'all' }}>alle</option>
+      <option value="unused" {{ 'selected' if state == 'unused' }}>offen</option>
+      <option value="used" {{ 'selected' if state == 'used' }}>verwendet</option>
+    </select>
+    <button class="btn">Filtern</button>
+    <span class="muted small">{{ codes|length }} Codes</span>
+  </form>
+  <p class="muted small">Hier siehst du nur, <em>ob</em> ein Code verwendet wurde – nie, was damit gewählt wurde. Verlorene Codes kannst du löschen und neue erzeugen.</p>
+  <div class="scroll">
+  <table class="plain codes">
+    <tr><th>Code</th><th>Abteilung</th><th>Status</th><th></th></tr>
+    {% for c in codes %}
+    <tr><td><code>{{ c.code[:3] }} {{ c.code[3:] }}</code></td><td>{{ c.department.name }}</td>
+      <td>{{ '✔ verwendet' if c.used else 'offen' }}</td>
+      <td class="num">{% if not c.used and status != 'ended' %}
+        <form method="post" action="/admin/codes/{{ c.id }}/delete" class="inline" data-confirm="Code {{ c.code }} löschen? Er funktioniert dann nicht mehr.">
+          <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn danger">Löschen</button></form>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  </div>
+</section>
+{% endblock %}

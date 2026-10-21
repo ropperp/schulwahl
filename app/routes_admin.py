@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from . import config
 from .db import get_db
-from .models import Candidate, Code, Department, Election, Race
+from . import images
+from . import settings as app_settings
+from .models import Candidate, Code, Department, Election, Image, Race
 from .pdfs import codes_pdf, protocol_pdf
 from .security import (admin_form, check_admin_password, client_ip, csrf_token, login_limiter,
                        require_admin, verify_csrf)
@@ -127,12 +129,16 @@ def create(request: Request, form=Depends(admin_form), db: Session = Depends(get
 def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
     e = get_election(db, election_id)
     races = db.scalars(
-        select(Race).where(Race.election_id == e.id)
-        .options(selectinload(Race.candidates), selectinload(Race.department))
+        select(Race).where(Race.election_id == e.id).options(selectinload(Race.candidates))
         .order_by(Race.position, Race.id)
     ).all()
-    return render(request, "admin_election.html", e=e, races=races, status=election_status(e),
-                  part=participation(db, e), default_base=config.PUBLIC_URL or str(request.base_url).rstrip("/"))
+    part = participation(db, e)
+    checks = [
+        ("Wahlgänge angelegt", bool(races)),
+        ("Jeder Wahlgang hat Kandidat/innen", bool(races) and all(r.candidates for r in races)),
+        ("Für jede Abteilung wurden Codes erzeugt", all(d["total"] > 0 for d in part["departments"])),
+    ]
+    return render(request, "admin_election.html", e=e, status=election_status(e), part=part, checks=checks, tab="overview")
 
 
 @router.post("/elections/{election_id}/settings")
@@ -209,6 +215,43 @@ def _structure_locked(request: Request, e: Election) -> bool:
     return False
 
 
+def _back(e: Election) -> RedirectResponse:
+    return go(f"/admin/elections/{e.id}/candidates")
+
+
+def _photo(request: Request, form) -> tuple[bytes, str] | None:
+    """Liest und verarbeitet ein hochgeladenes Kandidatenfoto; None = keins hochgeladen."""
+    try:
+        raw = images.read_upload(form.get("photo"))
+        return images.process(raw, "candidate") if raw else None
+    except images.ImageError as err:
+        flash(request, str(err), "error")
+        return None
+
+
+def _store_image(db: Session, data: tuple[bytes, str]) -> int:
+    img = Image(data=data[0], content_type=data[1])
+    db.add(img)
+    db.flush()
+    return img.id
+
+
+def _drop_image(db: Session, image_id: int | None) -> None:
+    if image_id:
+        db.query(Image).filter(Image.id == image_id).delete()
+
+
+@router.get("/elections/{election_id}/candidates")
+def candidates_page(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+    e = get_election(db, election_id)
+    races = db.scalars(
+        select(Race).where(Race.election_id == e.id)
+        .options(selectinload(Race.candidates), selectinload(Race.department))
+        .order_by(Race.position, Race.id)
+    ).all()
+    return render(request, "admin_candidates.html", e=e, races=races, status=election_status(e), tab="candidates")
+
+
 @router.post("/elections/{election_id}/races")
 def add_race(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
@@ -218,9 +261,36 @@ def add_race(request: Request, election_id: int, form=Depends(admin_form), db: S
         dept_id = int(dept_raw) if dept_raw.isdigit() else None
         if dept_id is not None and dept_id not in {d.id for d in e.departments}:
             raise HTTPException(400, "Unbekannte Abteilung")
-        db.add(Race(election_id=e.id, department_id=dept_id, title=title, position=len(e.races)))
+        db.add(Race(election_id=e.id, department_id=dept_id, title=title[:200], position=len(e.races)))
         db.commit()
-    return go(f"/admin/elections/{e.id}")
+    return _back(e)
+
+
+@router.post("/races/{race_id}/rename")
+def rename_race(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    race = db.get(Race, race_id) or _404()
+    e = get_election(db, race.election_id)
+    title = str(form.get("title", "")).strip()
+    if not _structure_locked(request, e) and title:
+        race.title = title[:200]
+        db.commit()
+    return _back(e)
+
+
+@router.post("/races/{race_id}/move")
+def move_race(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    race = db.get(Race, race_id) or _404()
+    e = get_election(db, race.election_id)
+    if not _structure_locked(request, e):
+        ordered = list(db.scalars(select(Race).where(Race.election_id == e.id).order_by(Race.position, Race.id)))
+        i = next(k for k, r in enumerate(ordered) if r.id == race.id)
+        j = i - 1 if form.get("dir") == "up" else i + 1
+        if 0 <= j < len(ordered):
+            ordered[i], ordered[j] = ordered[j], ordered[i]
+        for pos, r in enumerate(ordered):
+            r.position = pos
+        db.commit()
+    return _back(e)
 
 
 @router.post("/races/{race_id}/delete")
@@ -228,9 +298,13 @@ def delete_race(request: Request, race_id: int, form=Depends(admin_form), db: Se
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     if not _structure_locked(request, e):
+        image_ids = [c.image_id for c in race.candidates]
         db.delete(race)
+        db.flush()
+        for image_id in image_ids:
+            _drop_image(db, image_id)
         db.commit()
-    return go(f"/admin/elections/{e.id}")
+    return _back(e)
 
 
 @router.post("/races/{race_id}/candidates")
@@ -238,35 +312,128 @@ def add_candidate(request: Request, race_id: int, form=Depends(admin_form), db: 
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     name = str(form.get("name", "")).strip()
-    if not _structure_locked(request, e) and name:
-        db.add(Candidate(race_id=race.id, name=name, info=str(form.get("info", "")).strip()[:200]))
-        db.commit()
-    return go(f"/admin/elections/{e.id}")
+    if _structure_locked(request, e):
+        return _back(e)
+    if not name:
+        flash(request, "Bitte einen Namen angeben.", "error")
+        return _back(e)
+    photo = _photo(request, form)
+    if photo is None and form.get("photo") is not None and getattr(form.get("photo"), "filename", ""):
+        return _back(e)  # Fehler wurde schon gemeldet, nichts anlegen
+    cand = Candidate(race_id=race.id, name=name[:200], info=str(form.get("info", "")).strip()[:200])
+    if photo:
+        cand.image_id = _store_image(db, photo)
+    db.add(cand)
+    db.commit()
+    return _back(e)
+
+
+@router.post("/candidates/{candidate_id}/edit")
+def edit_candidate(request: Request, candidate_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    cand = db.get(Candidate, candidate_id) or _404()
+    e = get_election(db, db.get(Race, cand.race_id).election_id)
+    if _structure_locked(request, e):
+        return _back(e)
+    name = str(form.get("name", "")).strip()
+    if not name:
+        flash(request, "Der Name darf nicht leer sein.", "error")
+        return _back(e)
+    photo = _photo(request, form)
+    if photo is None and getattr(form.get("photo"), "filename", ""):
+        return _back(e)
+    cand.name, cand.info = name[:200], str(form.get("info", "")).strip()[:200]
+    if photo or form.get("remove_photo"):
+        _drop_image_later = cand.image_id
+        cand.image_id = _store_image(db, photo) if photo else None
+        db.flush()
+        _drop_image(db, _drop_image_later)
+    db.commit()
+    return _back(e)
 
 
 @router.post("/candidates/{candidate_id}/delete")
 def delete_candidate(request: Request, candidate_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
     cand = db.get(Candidate, candidate_id) or _404()
-    race = db.get(Race, cand.race_id)
-    e = get_election(db, race.election_id)
+    e = get_election(db, db.get(Race, cand.race_id).election_id)
     if not _structure_locked(request, e):
+        image_id = cand.image_id
         db.delete(cand)
+        db.flush()
+        _drop_image(db, image_id)
         db.commit()
-    return go(f"/admin/elections/{e.id}")
+    return _back(e)
 
 
 def _404():
     raise HTTPException(404, "Nicht gefunden")
 
 
+# ------------------------------------------------------------ Einstellungen (Schulname, Logo)
+
+@router.get("/settings")
+def settings_page(request: Request, _=Depends(require_admin)):
+    return render(request, "admin_settings.html", cfg=app_settings.get(), tab=None)
+
+
+@router.post("/settings")
+def settings_save(request: Request, form=Depends(admin_form), db: Session = Depends(get_db)):
+    name = str(form.get("school_name", "")).strip()[:100]
+    if not name:
+        flash(request, "Bitte einen Schulnamen angeben.", "error")
+        return go("/admin/settings")
+    logo = None
+    try:
+        raw = images.read_upload(form.get("logo"))
+        logo = images.process(raw, "logo") if raw else None
+    except images.ImageError as err:
+        flash(request, str(err), "error")
+        return go("/admin/settings")
+    app_settings.save(db, name, logo, remove_logo=bool(form.get("remove_logo")))
+    flash(request, "Einstellungen gespeichert.")
+    return go("/admin/settings")
+
+
 # ------------------------------------------------------------ Codes
+
+@router.get("/elections/{election_id}/codes")
+def codes_page(request: Request, election_id: int, department_id: int | None = None, state: str = "all",
+               db: Session = Depends(get_db), _=Depends(require_admin)):
+    e = get_election(db, election_id)
+    q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
+    if department_id:
+        q = q.where(Code.department_id == department_id)
+    if state == "unused":
+        q = q.where(Code.used.is_(False))
+    elif state == "used":
+        q = q.where(Code.used.is_(True))
+    codes = db.scalars(q).all()
+    codes.sort(key=lambda c: (c.department.name, c.code))
+    return render(request, "admin_codes.html", e=e, status=election_status(e), part=participation(db, e),
+                  codes=codes, department_id=department_id, state=state, tab="codes",
+                  default_base=config.PUBLIC_URL or str(request.base_url).rstrip("/"))
+
+
+@router.post("/codes/{code_id}/delete")
+def delete_code(request: Request, code_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    code = db.get(Code, code_id) or _404()
+    e = get_election(db, code.election_id)
+    if code.used:
+        flash(request, "Ein bereits verwendeter Code kann nicht gelöscht werden.", "error")
+    elif election_status(e) == "ended":
+        flash(request, "Die Wahl ist beendet.", "error")
+    else:
+        db.delete(code)
+        db.commit()
+        flash(request, "Code gelöscht (er ist nun ungültig).")
+    return go(f"/admin/elections/{e.id}/codes")
+
 
 @router.post("/elections/{election_id}/codes")
 def make_codes(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) == "ended":
         flash(request, "Die Wahl ist beendet, es können keine Codes mehr erzeugt werden.", "error")
-        return go(f"/admin/elections/{e.id}")
+        return go(f"/admin/elections/{e.id}/codes")
     dept = next((d for d in e.departments if str(d.id) == str(form.get("department_id"))), None)
     try:
         count = int(str(form.get("count", "0")))
@@ -274,7 +441,7 @@ def make_codes(request: Request, election_id: int, form=Depends(admin_form), db:
         count = 0
     if dept is None or not 1 <= count <= 2000:
         flash(request, "Bitte Abteilung und eine Anzahl zwischen 1 und 2000 angeben.", "error")
-        return go(f"/admin/elections/{e.id}")
+        return go(f"/admin/elections/{e.id}/codes")
     batch = generate_codes(db, e, dept, count)
     base = str(form.get("base_url", "")).strip().rstrip("/")
     flash(request, f"{count} Codes für {dept.name} erzeugt. Das PDF wird heruntergeladen.")
@@ -309,7 +476,7 @@ def dashboard(request: Request, election_id: int, db: Session = Depends(get_db),
     e = get_election(db, election_id)
     status = election_status(e)
     results = compute_results(db, e) if status == "ended" else None
-    return render(request, "admin_dashboard.html", e=e, status=status, part=participation(db, e), results=results)
+    return render(request, "admin_dashboard.html", e=e, status=status, part=participation(db, e), results=results, tab="dashboard")
 
 
 def _ended_or_redirect(request, e):
@@ -343,6 +510,9 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
     early = _ended_or_redirect(request, e)
     if early:
         return early
-    pdf = protocol_pdf(e, STATUS_LABEL["ended"], participation(db, e), compute_results(db, e))
+    cfg = app_settings.get()
+    logo = db.get(Image, cfg["logo_id"]) if cfg["logo_id"] else None
+    pdf = protocol_pdf(e, STATUS_LABEL["ended"], participation(db, e), compute_results(db, e),
+                       cfg["school_name"], logo.data if logo else None)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="wahlprotokoll-{e.id}.pdf"'})

@@ -1,0 +1,76 @@
+{% extends "admin_base.html" %}
+{% block title %}Kandidat/innen · {{ e.name }}{% endblock %}
+{% block content %}
+{% include "_election_nav.html" %}
+{% if status != 'planned' %}<div class="alert error">🔒 Nach dem Start können Wahlgänge und Kandidat/innen nicht mehr geändert werden.</div>{% endif %}
+
+{% for r in races %}
+<section class="card">
+  <div class="row between wrap">
+    <h2>{{ r.title }} <span class="tag">{{ r.department.name if r.department else 'alle Abteilungen' }}</span></h2>
+    {% if status == 'planned' %}
+    <div class="row gap">
+      <form method="post" action="/admin/races/{{ r.id }}/move" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input type="hidden" name="dir" value="up"><button class="btn small" title="nach oben" {{ 'disabled' if loop.first }}>↑</button></form>
+      <form method="post" action="/admin/races/{{ r.id }}/move" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input type="hidden" name="dir" value="down"><button class="btn small" title="nach unten" {{ 'disabled' if loop.last }}>↓</button></form>
+      <details class="inlinedet"><summary class="btn small">Umbenennen</summary>
+        <form method="post" action="/admin/races/{{ r.id }}/rename" class="row gap"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input name="title" value="{{ r.title }}" aria-label="Titel" required><button class="btn small">OK</button></form>
+      </details>
+      <form method="post" action="/admin/races/{{ r.id }}/delete" class="inline" data-confirm="Wahlgang samt Kandidat/innen löschen?"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn small ghost">Löschen</button></form>
+    </div>
+    {% endif %}
+  </div>
+
+  <ul class="candlist">
+    {% for c in r.candidates %}
+    <li>
+      <div class="row gap">
+        {% if c.image_id %}<img class="avatar" src="/media/candidate/{{ c.id }}" alt="">{% else %}<span class="avatar ph">{{ c.name[:1] }}</span>{% endif %}
+        <div class="grow"><strong>{{ c.name }}</strong><br><span class="muted small">{{ c.info or 'keine Klasse angegeben' }}</span></div>
+        {% if status == 'planned' %}
+        <details class="inlinedet"><summary class="btn small">Bearbeiten</summary>
+          <form method="post" action="/admin/candidates/{{ c.id }}/edit" enctype="multipart/form-data" class="editform">
+            <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+            <label>Name<input name="name" value="{{ c.name }}" required></label>
+            <label>Klasse / Info<input name="info" value="{{ c.info }}"></label>
+            <label>Neues Foto<input type="file" name="photo" accept="image/png,image/jpeg,image/webp"></label>
+            {% if c.image_id %}<label class="check"><input type="checkbox" name="remove_photo" value="1"> Foto entfernen</label>{% endif %}
+            <button class="btn primary small">Speichern</button>
+          </form>
+        </details>
+        <form method="post" action="/admin/candidates/{{ c.id }}/delete" class="inline" data-confirm="{{ c.name }} entfernen?"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn danger" title="Entfernen">✕</button></form>
+        {% endif %}
+      </div>
+    </li>
+    {% else %}<li class="muted">Noch keine Kandidat/innen.</li>{% endfor %}
+  </ul>
+
+  {% if status == 'planned' %}
+  <form method="post" action="/admin/races/{{ r.id }}/candidates" enctype="multipart/form-data" class="addcand">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <h3>Kandidat/in hinzufügen</h3>
+    <div class="grid3b">
+      <label>Name<input name="name" required></label>
+      <label>Klasse<input name="info" placeholder="z. B. 4AHET"></label>
+      <label>Foto (JPG/PNG/WebP)<input type="file" name="photo" accept="image/png,image/jpeg,image/webp"></label>
+    </div>
+    <button class="btn primary">+ Hinzufügen</button>
+  </form>
+  {% endif %}
+</section>
+{% endfor %}
+
+{% if status == 'planned' %}
+<section class="card">
+  <h2>Weiteren Wahlgang anlegen</h2>
+  <form method="post" action="/admin/elections/{{ e.id }}/races" class="row gap wrap addrace">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <input name="title" placeholder="z. B. Stellvertreter/in" aria-label="Titel" required>
+    <select name="department_id" aria-label="Für wen">
+      <option value="">alle Abteilungen</option>
+      {% for d in e.departments %}<option value="{{ d.id }}">nur {{ d.name }}</option>{% endfor %}
+    </select>
+    <button class="btn">+ Wahlgang</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

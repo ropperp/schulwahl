@@ -28,6 +28,8 @@ def clean_db():
     Base.metadata.create_all(engine)
     code_limiter.reset()
     login_limiter.reset()
+    from app import settings
+    settings.invalidate()
     yield
 
 

@@ -3,14 +3,9 @@
 {% block title %}Dashboard · {{ e.name }}{% endblock %}
 {% block head %}{% if status == 'running' %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
 {% block content %}
-<div class="row between">
-  <div><h1>{{ e.name }}</h1><p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr{% if e.closed_at and status == 'ended' %} · vorzeitig beendet {{ e.closed_at|local }}{% endif %}</p></div>
-  <span class="badge {{ status }}">{{ STATUS_LABEL[status] }}</span>
-</div>
-
+{% include "_election_nav.html" %}
 <section class="card">
   <div class="row gap wrap">
-    <a class="btn" href="/admin/elections/{{ e.id }}">⚙ Verwalten</a>
     {% if status == 'running' %}
     <form method="post" action="/admin/elections/{{ e.id }}/close" class="inline" data-confirm="Wahl jetzt beenden? Danach werden keine Stimmen mehr angenommen.">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn danger">⏹ Wahl jetzt beenden</button></form>

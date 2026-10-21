@@ -5,7 +5,7 @@ und eine zufällige ID. Ein Code weiß nur, DASS er verwendet wurde - nicht, was
 """
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, LargeBinary, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from .timeutil import utcnow
@@ -71,6 +71,7 @@ class Candidate(Base):
     race_id: Mapped[int] = mapped_column(ForeignKey("races.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     info: Mapped[str] = mapped_column(String(200), default="")
+    image_id: Mapped[int | None] = mapped_column(ForeignKey("images.id"), default=None)
 
     race: Mapped[Race] = relationship(back_populates="candidates")
 
@@ -95,3 +96,20 @@ class Vote(Base):
     race_id: Mapped[int] = mapped_column(ForeignKey("races.id"), index=True)
     candidate_id: Mapped[int | None] = mapped_column(ForeignKey("candidates.id"), default=None)
     # candidate_id = NULL bedeutet: ungültige Stimme
+
+
+class Image(Base):
+    """Hochgeladene, bereits verkleinerte Bilder (Kandidatenfotos, Schullogo)."""
+
+    __tablename__ = "images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(50))
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class Setting(Base):
+    __tablename__ = "settings"
+
+    key: Mapped[str] = mapped_column(String(50), primary_key=True)
+    value: Mapped[str] = mapped_column(String(500), default="")

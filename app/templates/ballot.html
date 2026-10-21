@@ -15,6 +15,7 @@
       {% for c in race.candidates %}
       <label class="choice">
         <input type="radio" name="race_{{ race.id }}" value="{{ c.id }}" required {{ 'checked' if prefill.get('race_' ~ race.id) == c.id|string }}>
+        {% if c.image_id %}<img class="avatar" src="/media/candidate/{{ c.id }}" alt="">{% else %}<span class="avatar ph">{{ c.name[:1] }}</span>{% endif %}
         <span><strong>{{ c.name }}</strong>{% if c.info %}<br><span class="muted small">{{ c.info }}</span>{% endif %}</span>
       </label>
       {% endfor %}

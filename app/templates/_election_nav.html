@@ -1,0 +1,10 @@
+<div class="row between">
+  <div><h1>{{ e.name }}</h1><p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr</p></div>
+  <span class="badge {{ status }}">{{ STATUS_LABEL[status] }}</span>
+</div>
+<nav class="tabs">
+  <a href="/admin/elections/{{ e.id }}" class="{{ 'on' if tab == 'overview' }}">Übersicht</a>
+  <a href="/admin/elections/{{ e.id }}/candidates" class="{{ 'on' if tab == 'candidates' }}">Kandidat/innen</a>
+  <a href="/admin/elections/{{ e.id }}/codes" class="{{ 'on' if tab == 'codes' }}">Codes</a>
+  <a href="/admin/elections/{{ e.id }}/dashboard" class="{{ 'on' if tab == 'dashboard' }}">Dashboard</a>
+</nav>

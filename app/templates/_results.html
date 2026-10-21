@@ -12,7 +12,7 @@
   <table class="bars">
     {% for row in r.rows %}
     <tr>
-      <td class="name">{{ row.candidate.name }}</td>
+      <td class="name">{% if row.candidate.image_id %}<img class="avatar sm" src="/media/candidate/{{ row.candidate.id }}" alt="">{% endif %}{{ row.candidate.name }}</td>
       <td class="barcell"><div class="bar"><span style="width: {{ row.percent }}%"></span></div></td>
       <td class="num">{{ row.votes }} <span class="muted small">({{ '%.1f'|format(row.percent) }} %)</span></td>
     </tr>

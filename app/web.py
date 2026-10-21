@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
-from . import config
+from . import settings
 from .security import csrf_token
 from .services import STATUS_LABEL, election_status
 from .timeutil import fmt_local, input_local
@@ -20,7 +20,9 @@ templates.env.globals["STATUS_LABEL"] = STATUS_LABEL
 
 def render(request: Request, name: str, status_code: int = 200, **ctx):
     flashes = request.session.pop("flashes", []) if "flashes" in request.session else []
-    ctx.update(school_name=config.SCHOOL_NAME, flashes=flashes)
+    cfg = settings.get()
+    ctx.update(school_name=cfg["school_name"], flashes=flashes,
+               logo_url=f"/media/logo?v={cfg['logo_id']}" if cfg["logo_id"] else None)
     response = templates.TemplateResponse(request, name, ctx, status_code=status_code)
     response.headers["Cache-Control"] = "no-store"
     return response

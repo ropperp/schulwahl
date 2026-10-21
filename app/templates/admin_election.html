@@ -1,17 +1,25 @@
 {% extends "admin_base.html" %}
 {% block title %}{{ e.name }}{% endblock %}
 {% block content %}
-<div class="row between">
-  <div><h1>{{ e.name }}</h1><p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr</p></div>
-  <span class="badge {{ status }}">{{ STATUS_LABEL[status] }}</span>
-</div>
+{% include "_election_nav.html" %}
 
 <section class="card">
-  <div class="row gap">
-    <a class="btn primary" href="/admin/elections/{{ e.id }}/dashboard">📊 Dashboard</a>
+  <h2>Vorbereitung</h2>
+  <ul class="checks">
+    {% for label, ok in checks %}<li class="{{ 'ok' if ok else 'todo' }}">{{ '✅' if ok else '⬜' }} {{ label }}</li>{% endfor %}
+  </ul>
+  <div class="row gap wrap">
+    <a class="btn" href="/admin/elections/{{ e.id }}/candidates">Kandidat/innen verwalten</a>
+    <a class="btn" href="/admin/elections/{{ e.id }}/codes">Codes erzeugen &amp; drucken</a>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Wahl steuern</h2>
+  <div class="row gap wrap">
     {% if status == 'planned' %}
     <form method="post" action="/admin/elections/{{ e.id }}/start-now" class="inline" data-confirm="Wahl jetzt starten?">
-      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn">▶ Jetzt starten</button></form>
+      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn primary">▶ Jetzt starten</button></form>
     {% elif status == 'running' %}
     <form method="post" action="/admin/elections/{{ e.id }}/close" class="inline" data-confirm="Wahl jetzt beenden? Danach werden keine Stimmen mehr angenommen.">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn danger">⏹ Jetzt beenden</button></form>
@@ -19,11 +27,12 @@
     <form method="post" action="/admin/elections/{{ e.id }}/delete" class="inline" data-confirm="Wahl samt Codes und Stimmen ENDGÜLTIG löschen?">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn ghost">🗑 Löschen</button></form>
   </div>
+  <p class="muted small">Beteiligung bisher: {{ part.used }} von {{ part.total }} Codes ({{ '%.1f'|format(part.percent) }} %).</p>
 </section>
 
 {% if status != 'ended' %}
 <section class="card">
-  <h2>Zeitfenster</h2>
+  <h2>Name &amp; Zeitfenster</h2>
   <form method="post" action="/admin/elections/{{ e.id }}/settings">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <label for="name">Name</label><input id="name" name="name" value="{{ e.name }}" required>
@@ -35,73 +44,4 @@
   </form>
 </section>
 {% endif %}
-
-<section class="card">
-  <h2>Codes</h2>
-  <table class="plain">
-    <tr><th>Abteilung</th><th class="num">Erzeugt</th><th class="num">Verwendet</th><th></th></tr>
-    {% for d in part.departments %}
-    <tr><td>{{ d.name }}</td><td class="num">{{ d.total }}</td><td class="num">{{ d.used }}</td>
-      <td class="num"><a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;unused=1&amp;base_url={{ default_base|urlencode }}">Unbenutzte als PDF</a></td></tr>
-    {% endfor %}
-  </table>
-  {% if status != 'ended' %}
-  <form method="post" action="/admin/elections/{{ e.id }}/codes" class="codeform">
-    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-    <div class="grid3">
-      <div><label for="department_id">Abteilung</label>
-        <select id="department_id" name="department_id">{% for d in e.departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
-      <div><label for="count">Anzahl</label><input id="count" name="count" type="number" min="1" max="2000" value="200" required></div>
-      <div><label for="base_url">Adresse im QR-Code</label><input id="base_url" name="base_url" value="{{ default_base }}" required></div>
-    </div>
-    <p class="muted small">Die Adresse muss genau die sein, unter der die Handys den Server erreichen (z. B. http://192.168.1.50:8080). Nach dem Erzeugen öffnet sich ein druckfertiges PDF (24 Zettel pro A4-Seite).</p>
-    <button class="btn primary">Codes erzeugen &amp; PDF öffnen</button>
-  </form>
-  {% endif %}
-</section>
-
-<section class="card">
-  <h2>Wahlgänge &amp; Kandidat/innen</h2>
-  {% if status != 'planned' %}<p class="muted small">🔒 Nach dem Start können Wahlgänge und Kandidat/innen nicht mehr geändert werden.</p>{% endif %}
-  {% for r in races %}
-  <div class="race-admin">
-    <div class="row between">
-      <h3>{{ r.title }} <span class="tag">{{ r.department.name if r.department else 'alle Abteilungen' }}</span></h3>
-      {% if status == 'planned' %}
-      <form method="post" action="/admin/races/{{ r.id }}/delete" class="inline" data-confirm="Wahlgang samt Kandidat/innen löschen?">
-        <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn danger">Wahlgang löschen</button></form>
-      {% endif %}
-    </div>
-    <ul class="cands">
-      {% for c in r.candidates %}
-      <li><span>{{ c.name }}{% if c.info %} <span class="muted small">· {{ c.info }}</span>{% endif %}</span>
-        {% if status == 'planned' %}
-        <form method="post" action="/admin/candidates/{{ c.id }}/delete" class="inline">
-          <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn danger" title="Entfernen">✕</button></form>
-        {% endif %}
-      </li>
-      {% else %}<li class="muted">Noch keine Kandidat/innen.</li>{% endfor %}
-    </ul>
-    {% if status == 'planned' %}
-    <form method="post" action="/admin/races/{{ r.id }}/candidates" class="row gap wrap">
-      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-      <input name="name" placeholder="Name" aria-label="Name" required>
-      <input name="info" placeholder="Klasse / Info (optional)" aria-label="Klasse oder Info">
-      <button class="btn">+ Hinzufügen</button>
-    </form>
-    {% endif %}
-  </div>
-  {% endfor %}
-  {% if status == 'planned' %}
-  <form method="post" action="/admin/elections/{{ e.id }}/races" class="row gap wrap addrace">
-    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-    <input name="title" placeholder="Neuer Wahlgang, z. B. Stellvertreter/in" aria-label="Titel" required>
-    <select name="department_id" aria-label="Für wen">
-      <option value="">alle Abteilungen</option>
-      {% for d in e.departments %}<option value="{{ d.id }}">nur {{ d.name }}</option>{% endfor %}
-    </select>
-    <button class="btn">+ Wahlgang</button>
-  </form>
-  {% endif %}
-</section>
 {% endblock %}

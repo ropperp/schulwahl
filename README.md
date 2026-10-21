@@ -7,8 +7,9 @@ FastAPI + PostgreSQL, mobil optimiert, läuft lokal im Schulnetz.
 
 - **Wahlseite für Schüler:** 6-stelliger Code (oder QR-Code scannen) → Stimmzettel → Zusammenfassung → verbindlich abschicken.
   Schulsprecher/in für alle, Abteilungssprecher/in nur für die Abteilung, zu der der Code gehört. Ungültig wählen ist möglich.
-- **Backoffice** (`/admin`, ein gemeinsames Passwort): Wahlen anlegen, Zeitfenster (Start/Ende), Kandidat/innen, Codes pro Abteilung erzeugen
-  und als druckfertiges PDF (24 Zettel pro A4-Seite, mit QR-Code), Wahl jederzeit vorzeitig beenden.
+- **Backoffice** (`/admin`, ein gemeinsames Passwort): je Wahl die Reiter *Übersicht* (Checkliste, Start/Ende, Zeitfenster), *Kandidat/innen*
+  (mit Foto und Klasse, bearbeiten, Wahlgänge umbenennen/sortieren), *Codes* (erzeugen, PDF mit QR-Code, Liste mit Status, Codes löschen) und *Dashboard*.
+  Unter *Einstellungen* stellst du Schulname und Schullogo ein. Die Wahl kann jederzeit vorzeitig beendet werden.
 - **Dashboard:** Beteiligung live je Abteilung (aktualisiert sich alle 10 s). Ergebnisse inkl. ungültiger Stimmen erst **nach Ende** der Wahl.
   Export als Protokoll-PDF und CSV, optional öffentliche Ergebnisseite.
 - Nach Ende des Zeitfensters (oder nach „Jetzt beenden“) werden keine Stimmen mehr angenommen.

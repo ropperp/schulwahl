@@ -11,7 +11,7 @@
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="{% block home %}/{% endblock %}">🗳 {{ school_name }}</a>
+    <a class="brand" href="{% block home %}/{% endblock %}">{% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="">{% else %}🗳{% endif %}<span>{{ school_name }}</span></a>
     <nav>{% block nav %}{% endblock %}</nav>
   </header>
   <main class="{% block mainclass %}{% endblock %}">

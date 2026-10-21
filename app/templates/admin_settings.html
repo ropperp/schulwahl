@@ -1,0 +1,20 @@
+{% extends "admin_base.html" %}
+{% block title %}Einstellungen{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Einstellungen</h1>
+  <form method="post" action="/admin/settings" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="school_name">Schulname</label>
+    <input id="school_name" name="school_name" value="{{ cfg.school_name }}" maxlength="100" required>
+
+    <label for="logo">Schullogo</label>
+    {% if cfg.logo_id %}<p><img class="logo-preview" src="/media/logo?v={{ cfg.logo_id }}" alt="Aktuelles Logo"></p>{% endif %}
+    <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">
+    <p class="muted small">JPG, PNG oder WebP, max. 5 MB. Wird automatisch verkleinert. PNG mit transparentem Hintergrund sieht am besten aus. Das Logo erscheint oben auf allen Seiten.</p>
+    {% if cfg.logo_id %}<label class="check"><input type="checkbox" name="remove_logo" value="1"> Logo entfernen</label>{% endif %}
+    <button class="btn primary big" type="submit">Speichern</button>
+  </form>
+</section>
+{% endblock %}

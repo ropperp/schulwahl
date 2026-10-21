@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Candidate, Code, Department, Election, Race, Vote
+from .models import Candidate, Code, Department, Election, Image, Race, Vote
 from .timeutil import fmt_local, utcnow
 
 # Ohne leicht verwechselbare Zeichen (kein I, O, 0, 1): 32 Zeichen ^ 6 Stellen = ~1 Mrd. Kombinationen
@@ -210,8 +210,12 @@ def compute_results(db: Session, election: Election) -> list[dict]:
 def delete_election(db: Session, election: Election) -> None:
     """Löscht eine Wahl samt Codes und Stimmen in FK-sicherer Reihenfolge."""
     race_ids = select(Race.id).where(Race.election_id == election.id)
+    image_ids = list(db.scalars(select(Candidate.image_id).where(Candidate.race_id.in_(race_ids),
+                                                                   Candidate.image_id.is_not(None))))
     db.execute(delete(Vote).where(Vote.race_id.in_(race_ids)))
     db.execute(delete(Candidate).where(Candidate.race_id.in_(race_ids)))
+    if image_ids:
+        db.execute(delete(Image).where(Image.id.in_(image_ids)))
     db.execute(delete(Code).where(Code.election_id == election.id))
     db.execute(delete(Race).where(Race.election_id == election.id))
     db.execute(delete(Department).where(Department.election_id == election.id))

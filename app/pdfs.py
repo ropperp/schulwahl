@@ -78,12 +78,22 @@ def codes_pdf(election_name: str, items: list[tuple[str, str]], base_url: str) -
     return buf.getvalue()
 
 
-def protocol_pdf(election, status_label: str, part: dict, results: list[dict]) -> bytes:
+def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
+                 school_name: str = "", logo: bytes | None = None) -> bytes:
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=18 * mm, bottomMargin=18 * mm, title=f"Wahlprotokoll – {election.name}")
     styles = getSampleStyleSheet()
-    story = [Paragraph(f"Wahlprotokoll: {escape(election.name)}", styles["Title"])]
+    story = []
+    if logo:
+        from reportlab.lib.utils import ImageReader
+        from reportlab.platypus import Image as RLImage
+        iw, ih = ImageReader(io.BytesIO(logo)).getSize()
+        h = 18 * mm
+        story.append(RLImage(io.BytesIO(logo), width=h * iw / ih, height=h, hAlign="LEFT"))
+    if school_name:
+        story.append(Paragraph(escape(school_name), styles["Heading3"]))
+    story.append(Paragraph(f"Wahlprotokoll: {escape(election.name)}", styles["Title"]))
     ended = fmt_local(election.closed_at) if election.closed_at and election.closed_at < election.end_at else fmt_local(election.end_at)
     story += [
         Paragraph(f"Wahlzeitraum: {fmt_local(election.start_at)} bis {ended} Uhr ({status_label})", styles["Normal"]),

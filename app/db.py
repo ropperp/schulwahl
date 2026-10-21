@@ -1,6 +1,6 @@
 import time
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
@@ -25,8 +25,17 @@ def init_db(retries: int = 30) -> None:
     for attempt in range(retries):
         try:
             Base.metadata.create_all(engine)
+            _migrate()
             return
         except OperationalError:
             if attempt == retries - 1:
                 raise
             time.sleep(1)
+
+
+def _migrate() -> None:
+    """Ergänzt Spalten, die in älteren Versionen noch fehlten (create_all ändert keine bestehenden Tabellen)."""
+    cols = {c["name"] for c in inspect(engine).get_columns("candidates")}
+    if "image_id" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE candidates ADD COLUMN image_id INTEGER REFERENCES images(id)"))
