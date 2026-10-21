@@ -1,0 +1,37 @@
+{% extends "admin_base.html" %}
+{% from "_results.html" import results_block, participation_block %}
+{% block title %}Dashboard · {{ e.name }}{% endblock %}
+{% block head %}{% if status == 'running' %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block content %}
+<div class="row between">
+  <div><h1>{{ e.name }}</h1><p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr{% if e.closed_at and status == 'ended' %} · vorzeitig beendet {{ e.closed_at|local }}{% endif %}</p></div>
+  <span class="badge {{ status }}">{{ STATUS_LABEL[status] }}</span>
+</div>
+
+<section class="card">
+  <div class="row gap wrap">
+    <a class="btn" href="/admin/elections/{{ e.id }}">⚙ Verwalten</a>
+    {% if status == 'running' %}
+    <form method="post" action="/admin/elections/{{ e.id }}/close" class="inline" data-confirm="Wahl jetzt beenden? Danach werden keine Stimmen mehr angenommen.">
+      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn danger">⏹ Wahl jetzt beenden</button></form>
+    {% endif %}
+    {% if status == 'ended' %}
+    <a class="btn" href="/admin/elections/{{ e.id }}/protocol.pdf" target="_blank">📄 Protokoll (PDF)</a>
+    <a class="btn" href="/admin/elections/{{ e.id }}/results.csv">⬇ CSV</a>
+    <form method="post" action="/admin/elections/{{ e.id }}/publish" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+      <button class="btn">{{ 'Veröffentlichung zurücknehmen' if e.results_public else '📢 Ergebnis veröffentlichen' }}</button></form>
+    {% endif %}
+  </div>
+  {% if status == 'ended' and e.results_public %}<p class="small">Öffentlich unter <a href="/ergebnis/{{ e.id }}">/ergebnis/{{ e.id }}</a></p>{% endif %}
+  {% if status == 'running' %}<p class="muted small">Diese Seite aktualisiert sich alle 10 Sekunden. Ergebnisse werden erst nach Ende der Wahl angezeigt.</p>{% endif %}
+</section>
+
+{{ participation_block(part) }}
+
+{% if results is not none %}
+{{ results_block(results) }}
+{% else %}
+<section class="card"><p class="muted">🔒 Die Ergebnisse werden erst angezeigt, wenn die Wahl beendet ist{% if status == 'planned' %} (sie hat noch nicht begonnen){% endif %}.</p></section>
+{% endif %}
+{% endblock %}

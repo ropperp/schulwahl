@@ -1,0 +1,19 @@
+{% extends "admin_base.html" %}
+{% block title %}Wahlen{% endblock %}
+{% block content %}
+<div class="row between"><h1>Wahlen</h1><a class="btn primary" href="/admin/elections/new">+ Neue Wahl</a></div>
+{% if not elections %}<section class="card"><p>Noch keine Wahl angelegt.</p></section>{% endif %}
+{% for e in elections %}
+{% set s = status_of(e) %}
+<section class="card">
+  <div class="row between">
+    <div>
+      <h2><a href="/admin/elections/{{ e.id }}">{{ e.name }}</a></h2>
+      <p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr</p>
+    </div>
+    <span class="badge {{ s }}">{{ STATUS_LABEL[s] }}</span>
+  </div>
+  <p><a href="/admin/elections/{{ e.id }}">Verwalten</a> · <a href="/admin/elections/{{ e.id }}/dashboard">Dashboard</a></p>
+</section>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,42 @@
+{% macro results_block(results) %}
+{% for r in results %}
+<section class="card">
+  <h2>{{ r.race.title }}{% if r.department %} <span class="tag">{{ r.department }}</span>{% endif %}</h2>
+  {% if r.tie %}
+    <p class="alert error">Stimmengleichheit zwischen: {{ r.leaders|map(attribute='name')|join(', ') }}</p>
+  {% elif r.leaders %}
+    <p class="winner">🏆 Gewählt: <strong>{{ r.leaders[0].name }}</strong></p>
+  {% else %}
+    <p class="muted">Keine gültigen Stimmen.</p>
+  {% endif %}
+  <table class="bars">
+    {% for row in r.rows %}
+    <tr>
+      <td class="name">{{ row.candidate.name }}</td>
+      <td class="barcell"><div class="bar"><span style="width: {{ row.percent }}%"></span></div></td>
+      <td class="num">{{ row.votes }} <span class="muted small">({{ '%.1f'|format(row.percent) }} %)</span></td>
+    </tr>
+    {% endfor %}
+    <tr class="inv"><td class="name">Ungültig</td><td></td><td class="num">{{ r.invalid }}</td></tr>
+    <tr class="sum"><td class="name">Abgegebene Stimmen</td><td></td><td class="num">{{ r.total }}</td></tr>
+  </table>
+  {% if not r.consistent %}<p class="alert error">Achtung: {{ r.total }} Stimmen, aber {{ r.expected }} verbrauchte Codes.</p>{% endif %}
+</section>
+{% endfor %}
+{% endmacro %}
+
+{% macro participation_block(part) %}
+<section class="card">
+  <h2>Wahlbeteiligung</h2>
+  <div class="bigstat"><span class="n">{{ part.used }}</span> von {{ part.total }} Codes verwendet <strong>({{ '%.1f'|format(part.percent) }} %)</strong></div>
+  <table class="bars">
+    {% for d in part.departments %}
+    <tr>
+      <td class="name">{{ d.name }}</td>
+      <td class="barcell"><div class="bar"><span style="width: {{ d.percent }}%"></span></div></td>
+      <td class="num">{{ d.used }} / {{ d.total }} <span class="muted small">({{ '%.1f'|format(d.percent) }} %)</span></td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endmacro %}

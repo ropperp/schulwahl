@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Wählen{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Schulwahl</h1>
+  <p>Gib deinen persönlichen Wahlcode ein. Du hast ihn auf einem Zettel von deinem Klassenvorstand bekommen.</p>
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/vote/start" autocomplete="off">
+    <label for="code">Wahlcode</label>
+    <input id="code" name="code" class="codeinput" value="{{ code }}" maxlength="12"
+           autocapitalize="characters" autocorrect="off" spellcheck="false" required {% if not code %}autofocus{% endif %}>
+    <button class="btn primary big" type="submit">Weiter zur Wahl</button>
+  </form>
+  <p class="muted small">Deine Wahl ist geheim: Der Code wird nur als „verwendet“ markiert, deine Stimme wird getrennt davon und ohne Bezug zu dir gespeichert.</p>
+</section>
+{% endblock %}

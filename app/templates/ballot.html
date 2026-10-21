@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Stimmzettel{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Stimmzettel</h1>
+  <p class="muted">{{ election.name }} · Abteilung {{ department }}</p>
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/vote/review">
+    <input type="hidden" name="code" value="{{ code }}">
+    {% for race in races %}
+    <fieldset class="race">
+      <legend>{{ race.title }}</legend>
+      <p class="muted small">Du hast eine Stimme.</p>
+      {% for c in race.candidates %}
+      <label class="choice">
+        <input type="radio" name="race_{{ race.id }}" value="{{ c.id }}" required {{ 'checked' if prefill.get('race_' ~ race.id) == c.id|string }}>
+        <span><strong>{{ c.name }}</strong>{% if c.info %}<br><span class="muted small">{{ c.info }}</span>{% endif %}</span>
+      </label>
+      {% endfor %}
+      <label class="choice invalid">
+        <input type="radio" name="race_{{ race.id }}" value="invalid" required {{ 'checked' if prefill.get('race_' ~ race.id) == 'invalid' }}>
+        <span><strong>Ungültig wählen</strong><br><span class="muted small">Stimme bewusst ungültig abgeben</span></span>
+      </label>
+    </fieldset>
+    {% endfor %}
+    <button class="btn primary big" type="submit">Weiter zur Zusammenfassung</button>
+  </form>
+</section>
+{% endblock %}

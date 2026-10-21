@@ -1,0 +1,25 @@
+{% extends "admin_base.html" %}
+{% block title %}Neue Wahl{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Neue Wahl</h1>
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/elections">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="name">Name der Wahl</label>
+    <input id="name" name="name" placeholder="Schulsprecherwahl 2026" required>
+    <div class="grid2">
+      <div><label for="start_at">Start</label><input id="start_at" name="start_at" type="datetime-local" value="{{ start }}" required></div>
+      <div><label for="end_at">Ende</label><input id="end_at" name="end_at" type="datetime-local" value="{{ end }}" required></div>
+    </div>
+    <label for="departments">Abteilungen (eine pro Zeile)</label>
+    <textarea id="departments" name="departments" rows="4" required>Elektrotechnik
+Mechatronik
+Maschinenbau</textarea>
+    <label class="check"><input type="checkbox" name="standard_races" value="1" checked>
+      Standard-Wahlgänge anlegen (Schulsprecher/in für alle + Abteilungssprecher/in je Abteilung)</label>
+    <button class="btn primary big" type="submit">Wahl anlegen</button>
+  </form>
+</section>
+{% endblock %}

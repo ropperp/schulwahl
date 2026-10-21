@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block home %}/admin{% endblock %}
+{% block nav %}
+  {% if request.session.get('admin') %}
+  <a href="/admin">Wahlen</a>
+  <form method="post" action="/admin/logout" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <button class="linkbtn" type="submit">Abmelden</button>
+  </form>
+  {% endif %}
+{% endblock %}

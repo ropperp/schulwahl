@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% from "_results.html" import results_block, participation_block %}
+{% block title %}Ergebnis{% endblock %}
+{% block content %}
+<h1>Ergebnis: {{ e.name }}</h1>
+{{ participation_block(part) }}
+{{ results_block(results) }}
+{% endblock %}

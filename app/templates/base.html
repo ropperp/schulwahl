@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>{% block title %}Wahl{% endblock %} · {{ school_name }}</title>
+  {% block head %}{% endblock %}
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="{% block home %}/{% endblock %}">🗳 {{ school_name }}</a>
+    <nav>{% block nav %}{% endblock %}</nav>
+  </header>
+  <main class="{% block mainclass %}{% endblock %}">
+    {% for f in flashes %}<div class="alert {{ 'error' if f.kind == 'error' else 'ok' }}">{{ f.text }}</div>{% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

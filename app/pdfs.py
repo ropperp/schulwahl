@@ -1,0 +1,138 @@
+"""PDF-Erzeugung: Code-Zettel mit QR-Code und Wahlprotokoll."""
+import io
+
+from reportlab.graphics import renderPDF
+from reportlab.graphics.barcode import qr
+from reportlab.graphics.shapes import Drawing
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from xml.sax.saxutils import escape
+
+from .timeutil import fmt_local, utcnow
+
+
+def _fit(text: str, font: str, size: float, max_width: float) -> str:
+    """Kürzt Text mit … so, dass er in die Breite passt."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    if stringWidth(text, font, size) <= max_width:
+        return text
+    while text and stringWidth(text + "…", font, size) > max_width:
+        text = text[:-1]
+    return text + "…"
+
+
+def _qr(c: canvas.Canvas, url: str, x: float, y: float, size: float) -> None:
+    widget = qr.QrCodeWidget(url, barLevel="M")
+    x0, y0, x1, y1 = widget.getBounds()
+    d = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
+    d.add(widget)
+    renderPDF.draw(d, c, x, y)
+
+
+def codes_pdf(election_name: str, items: list[tuple[str, str]], base_url: str) -> bytes:
+    """items = [(Abteilung, Code)]. 3 x 8 Zettel pro A4-Seite zum Ausschneiden."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    c.setTitle(f"Wahlcodes – {election_name}")
+    page_w, page_h = A4
+    cols, rows, margin = 3, 8, 10 * mm
+    w = (page_w - 2 * margin) / cols
+    h = (page_h - 2 * margin) / rows
+    per_page = cols * rows
+    pad = 3 * mm
+    qr_size = min(h - 2 * pad, 25 * mm)
+
+    for i, (dept, code) in enumerate(items):
+        if i and i % per_page == 0:
+            c.showPage()
+        slot = i % per_page
+        x = margin + (slot % cols) * w
+        y = page_h - margin - (slot // cols + 1) * h
+
+        c.setStrokeColor(colors.grey)
+        c.setLineWidth(0.4)
+        c.setDash(1.5, 2)
+        c.rect(x, y, w, h)
+        c.setDash()
+
+        text_w = w - qr_size - 3 * pad
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica", 7)
+        c.drawString(x + pad, y + h - pad - 6, _fit(election_name, "Helvetica", 7, w - 2 * pad))
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(x + pad, y + h - pad - 18, _fit(dept, "Helvetica-Bold", 9, text_w))
+        c.setFont("Courier-Bold", 17)
+        c.drawString(x + pad, y + h / 2 - 12, f"{code[:3]} {code[3:]}")
+        c.setFont("Helvetica", 6.5)
+        c.drawString(x + pad, y + pad + 9, "Einmal gültig – nicht weitergeben")
+        c.drawString(x + pad, y + pad + 1, _fit(base_url, "Helvetica", 6.5, w - 2 * pad))
+        _qr(c, f"{base_url}/c/{code}", x + w - qr_size - pad, y + (h - qr_size) / 2 + 3, qr_size)
+
+    c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+def protocol_pdf(election, status_label: str, part: dict, results: list[dict]) -> bytes:
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
+                            topMargin=18 * mm, bottomMargin=18 * mm, title=f"Wahlprotokoll – {election.name}")
+    styles = getSampleStyleSheet()
+    story = [Paragraph(f"Wahlprotokoll: {escape(election.name)}", styles["Title"])]
+    ended = fmt_local(election.closed_at) if election.closed_at and election.closed_at < election.end_at else fmt_local(election.end_at)
+    story += [
+        Paragraph(f"Wahlzeitraum: {fmt_local(election.start_at)} bis {ended} Uhr ({status_label})", styles["Normal"]),
+        Paragraph(f"Protokoll erstellt: {fmt_local(utcnow())} Uhr", styles["Normal"]),
+        Spacer(1, 8 * mm),
+        Paragraph("Wahlbeteiligung", styles["Heading2"]),
+    ]
+    table_style = TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eaf0")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+        ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+    ])
+    rows = [["Abteilung", "Ausgegebene Codes", "Abgegebene Stimmzettel", "Beteiligung"]]
+    for d in part["departments"]:
+        rows.append([d["name"], d["total"], d["used"], f'{d["percent"]:.1f} %'])
+    rows.append(["Gesamt", part["total"], part["used"], f'{part["percent"]:.1f} %'])
+    t = Table(rows, hAlign="LEFT")
+    t.setStyle(table_style)
+    t.setStyle(TableStyle([("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold")]))
+    story += [t, Spacer(1, 6 * mm)]
+
+    for r in results:
+        title = r["race"].title + (f" ({r['department']})" if r["department"] else "")
+        story.append(Paragraph(escape(title), styles["Heading2"]))
+        data = [["Kandidat/in", "Stimmen", "Anteil gültig"]]
+        for row in r["rows"]:
+            data.append([row["candidate"].name, row["votes"], f'{row["percent"]:.1f} %'])
+        data.append(["Gültige Stimmen gesamt", r["valid"], ""])
+        data.append(["Ungültige Stimmen", r["invalid"], ""])
+        data.append(["Abgegebene Stimmen gesamt", r["total"], ""])
+        t = Table(data, hAlign="LEFT", colWidths=[90 * mm, 25 * mm, 30 * mm])
+        t.setStyle(table_style)
+        story.append(t)
+        if r["tie"]:
+            outcome = "Stimmengleichheit zwischen: " + ", ".join(c.name for c in r["leaders"])
+        elif r["leaders"]:
+            outcome = f"Gewählt: {r['leaders'][0].name}"
+        else:
+            outcome = "Kein Ergebnis (keine gültigen Stimmen)"
+        story.append(Paragraph(f"<b>{escape(outcome)}</b>", styles["Normal"]))
+        if not r["consistent"]:
+            story.append(Paragraph(
+                f"<font color='red'>ACHTUNG: {r['total']} Stimmen, aber {r['expected']} verbrauchte Codes.</font>",
+                styles["Normal"]))
+        story.append(Spacer(1, 5 * mm))
+
+    story += [Spacer(1, 15 * mm),
+              Table([["_______________________________", "_______________________________"],
+                     ["Wahlleiter/in", "Schulleitung / Zweite Person"]], hAlign="LEFT")]
+    doc.build(story)
+    return buf.getvalue()

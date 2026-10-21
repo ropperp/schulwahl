@@ -1,0 +1,16 @@
+{% extends "admin_base.html" %}
+{% block title %}Admin-Login{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Backoffice</h1>
+  {% if disabled %}<div class="alert error">Es ist kein ADMIN_PASSWORD gesetzt. Bitte in der .env-Datei eintragen und neu starten.</div>{% endif %}
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/login">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="password">Passwort</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <button class="btn primary big" type="submit">Anmelden</button>
+  </form>
+</section>
+{% endblock %}
