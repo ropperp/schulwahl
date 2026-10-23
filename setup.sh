@@ -9,7 +9,16 @@ err()  { printf '\033[31mFehler: %s\033[0m\n' "$*" >&2; }
 
 command -v docker >/dev/null 2>&1 || { err "Docker ist nicht installiert."; exit 1; }
 docker compose version >/dev/null 2>&1 || { err "„docker compose“ fehlt (Docker Compose v2 nötig)."; exit 1; }
-docker info >/dev/null 2>&1 || { err "Der Docker-Dienst läuft nicht. Bitte Docker (Desktop) starten und nochmal versuchen."; exit 1; }
+if ! DOCKER_ERR="$(docker info 2>&1 >/dev/null)"; then
+  case "$DOCKER_ERR" in
+    *ermission*denied*)
+      err "Keine Berechtigung für Docker. Einmal ausführen:  sudo usermod -aG docker \$USER"
+      echo "Danach ab- und wieder anmelden (oder  newgrp docker  ausführen) und ./setup.sh erneut starten." ;;
+    *) err "Der Docker-Dienst läuft nicht. Bitte Docker (Desktop) starten und nochmal versuchen."
+       echo "$DOCKER_ERR" | head -3 ;;
+  esac
+  exit 1
+fi
 
 rand() { # zufälliger Wert aus Buchstaben und Zahlen (|| true: head beendet die Pipe absichtlich früh)
   head -c 2048 /dev/urandom | base64 | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1" || true

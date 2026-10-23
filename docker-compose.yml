@@ -10,9 +10,10 @@ services:
       - dbdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U schulwahl -d schulwahl"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
+      start_period: 120s  # erste Initialisierung auf einem Raspberry Pi mit SD-Karte dauert länger
 
   app:
     build: .
