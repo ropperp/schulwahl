@@ -124,7 +124,7 @@ Möglich mit *Docker Desktop (WSL2)*, aber für den Dauerbetrieb nicht empfohlen
 1. `https://wahl.htl1-klu.at/admin` öffnen. Anmelden mit Benutzer **`admin`** und dem Startpasswort.
 2. **Mein Konto → Passwort ändern.** Ein persönliches, langes Passwort wählen (mind. 10 Zeichen; mehrere Wörter hintereinander merkt man sich leicht).
 3. **Einstellungen** (nur Administratoren):
-   - Schulname und Logo,
+   - Schulname und Logo (weiße Variante auf transparentem Hintergrund, passt zur dunkelblauen Kopfzeile),
    - **Adresse im QR-Code** = `https://wahl.htl1-klu.at` (genau die Adresse, unter der die Schüler die Wahl erreichen; wird auf die Code-Zettel gedruckt).
 4. **Benutzer:** für jede Lehrkraft, die die Wahl durchführt, einen **Wahlleiter**-Zugang anlegen. Das System erzeugt ein Einmal-Passwort, das persönlich
    weitergegeben wird; beim ersten Login muss die Person ein eigenes Passwort wählen. Vergisst jemand sein Passwort: Admin → *Benutzer → Passwort zurücksetzen*.

@@ -11,3 +11,10 @@ document.addEventListener("input", function (ev) {
     try { ev.target.setSelectionRange(pos, pos); } catch (e) {}
   }
 });
+// Benutzer-Menü schließen bei Klick daneben oder Escape
+document.addEventListener("click", function (ev) {
+  document.querySelectorAll("details.usermenu[open]").forEach(function (d) { if (!d.contains(ev.target)) d.removeAttribute("open"); });
+});
+document.addEventListener("keydown", function (ev) {
+  if (ev.key === "Escape") document.querySelectorAll("details.usermenu[open]").forEach(function (d) { d.removeAttribute("open"); });
+});

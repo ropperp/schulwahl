@@ -3,7 +3,7 @@
 {% block title %}Ergebnis{% endblock %}
 {% block nav %}<a href="/">Zur Wahl</a> <a href="/vergangene">Vergangene Wahlen</a>{% endblock %}
 {% block content %}
-<h1>Ergebnis: {{ e.name }}</h1>
+<div class="hero"><h1>Ergebnis</h1><p>{{ e.name }}</p></div>
 {{ participation_block(part) }}
 {{ results_block(results) }}
 {% endblock %}
