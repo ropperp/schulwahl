@@ -4,6 +4,22 @@
 {% include "_election_nav.html" %}
 {% if status != 'planned' %}<div class="alert error">🔒 Nach dem Start können Wahlgänge und Kandidat/innen nicht mehr geändert werden.</div>{% endif %}
 
+<section class="card">
+  <h2>Sichern &amp; übernehmen</h2>
+  <p class="muted small">Alle Wahlgänge samt Kandidat/innen und Fotos als Datei sichern – z. B. um sie für Testläufe, eine Wiederholung oder das nächste Jahr wieder einzuspielen. Die Datei enthält keine Codes und keine Stimmen.</p>
+  <div class="row gap wrap">
+    <a class="btn" href="/admin/elections/{{ e.id }}/candidates.json">⬇ Kandidat/innen exportieren</a>
+    {% if status == 'planned' %}
+    <form method="post" action="/admin/elections/{{ e.id }}/candidates/import" enctype="multipart/form-data" class="row gap wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+      <input name="import_file" type="file" accept="application/json,.json" aria-label="Export-Datei" required>
+      <button class="btn">⬆ Importieren</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if status == 'planned' %}<p class="muted small">Beim Import werden gleichnamige Wahlgänge ergänzt und schon vorhandene Kandidat/innen übersprungen.</p>{% endif %}
+</section>
+
 {% for r in races %}
 <section class="card">
   <div class="row between wrap">

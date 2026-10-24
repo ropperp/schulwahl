@@ -59,6 +59,8 @@ class Race(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     # Stichwahl: "" = normaler Wahlgang, "speaker" = Stichwahl um Platz 1, "deputy" = Stichwahl um die Stellvertretung
     runoff_kind: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    # Entscheidung der Wahlleitung nach Wahlende: "" = offen, "yes" = Stichwahl durchführen, "no" = keine Stichwahl
+    runoff_decision: Mapped[str] = mapped_column(String(10), default="", server_default="")
 
     election: Mapped[Election] = relationship(back_populates="races")
     department: Mapped[Department | None] = relationship()

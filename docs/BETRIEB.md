@@ -24,7 +24,7 @@ sind alle bisherigen Anmeldungen dieses Kontos beendet. Empfehlung: **Vier-Augen
 3. Backoffice → **Neue Wahl**. Zeitfenster festlegen und die Betriebsart der Codes wählen:
    - **pro Abteilung** (datensparsam, empfohlen) – die Beteiligung ist je Abteilung sichtbar,
    - **pro Klasse** – zusätzlich Beteiligung je Klasse (z. B. für einen Klassenwettbewerb).
-4. Reiter **Kandidat/innen** füllen. Ab Wahlbeginn ist nichts mehr änderbar. Die Reihenfolge der Kandidat/innen auf dem Stimmzettel wird **für jeden Wähler zufällig** gemischt.
+4. Reiter **Kandidat/innen** füllen – oder aus einer früheren Wahl **importieren** (siehe unten). Ab Wahlbeginn ist nichts mehr änderbar. Die Reihenfolge der Kandidat/innen auf dem Stimmzettel wird **für jeden Wähler zufällig** gemischt.
 5. Unter **Einstellungen** die QR-Adresse prüfen. **Erst danach** Codes erzeugen und drucken (die Adresse steckt im QR-Code).
 
 ### Codes drucken und verteilen
@@ -40,10 +40,24 @@ sind alle bisherigen Anmeldungen dieses Kontos beendet. Empfehlung: **Vier-Augen
 
 ### Nach der Wahl
 12. **Dashboard** → Ergebnis prüfen. Die Konsistenzprüfung vergleicht abgegebene Stimmen mit verbrauchten Codes; eine rote Warnung bedeutet „Wahlleitung und Administration verständigen, nichts löschen“.
-13. **Protokoll-PDF** und **CSV** herunterladen, vom Wahlleiter und einer zweiten Person unterschreiben lassen, ablegen.
-14. Optional **Ergebnis veröffentlichen** (erscheint auf der Startseite unter „Vergangene Wahlen“).
-15. **Stichwahl:** Bei Stimmengleichheit um Platz 1 oder 2 erscheint im Dashboard der Button *Stichwahl anlegen* (neue Wahl mit den betroffenen Kandidat/innen; **neue Codes** erzeugen und drucken).
+13. **Stichwahl entscheiden – bei jedem Wahlgang.** Das System gibt nur eine **Empfehlung**, die Entscheidung trifft die Wahlleitung:
+    - *Stichwahl empfohlen*, wenn es mehr als zwei Kandidat/innen gab und niemand mehr als 50 % der gültigen Stimmen hat, oder bei Stimmengleichheit.
+    - *Keine Stichwahl empfohlen* bei absoluter Mehrheit oder nur zwei Kandidat/innen (da bringt eine Stichwahl nichts).
+    - Mit **„Ja, Stichwahl durchführen“** erscheint der Button *Stichwahl anlegen*: Er legt eine neue Wahl mit den **zwei Bestplatzierten** an (bei Gleichstand um Platz 2 alle Gleichplatzierten). In der Stichwahl ist der/die Unterlegene automatisch **Stellvertreter/in**. Neue Codes erzeugen und drucken.
+    - Mit **„Nein, keine Stichwahl“** gilt das Ergebnis: Platz 1 gewählt, **Platz 2 ist Stellvertreter/in**.
+    - Solange bei einem Wahlgang nichts entschieden ist, lässt sich das Ergebnis **nicht veröffentlichen**.
+    - Nach dem Veröffentlichen ist die Entscheidung **gesperrt**. Mit *Veröffentlichung zurücknehmen* lässt sie sich ändern (auch wieder „offen“ setzen).
+14. **Protokoll-PDF** (enthält die Entscheidung der Wahlleitung) und **CSV** herunterladen, vom Wahlleiter und einer zweiten Person unterschreiben lassen, ablegen.
+15. Optional **Ergebnis veröffentlichen** (erscheint auf der Startseite unter „Vergangene Wahlen“; bei „Stichwahl“ steht dort, wer antritt).
 16. **Nicht verbrauchte Zettel einsammeln und vernichten.**
+
+## Kandidat/innen sichern und wieder einspielen (Export/Import)
+
+Für Testläufe, Wiederholungen oder das nächste Jahr: Auf der Seite **Kandidat/innen** lädt *Kandidat/innen exportieren* eine Datei (JSON) mit allen Wahlgängen,
+Kandidat/innen, Klassen und Fotos herunter. Sie enthält **keine Codes, Stimmen oder Benutzer**.
+Eingespielt wird sie mit *Importieren* auf der Kandidaten-Seite einer **noch nicht gestarteten** Wahl oder direkt beim Anlegen einer **neuen Wahl** (Feld „Kandidat/innen aus einer Export-Datei übernehmen“).
+Gleichnamige Wahlgänge werden ergänzt, schon vorhandene Kandidat/innen übersprungen, fehlende Abteilungen angelegt. Typischer Testablauf: Wahl anlegen und Kandidat/innen eintragen → exportieren → testen und beenden →
+neue Wahl anlegen und die Datei importieren.
 
 ## Häufige Fragen am Wahltag
 
