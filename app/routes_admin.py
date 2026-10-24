@@ -16,7 +16,7 @@ from . import settings as app_settings
 from .models import Candidate, Code, Department, Election, Image, Race
 from .pdfs import codes_pdf, protocol_pdf
 from .security import admin_form, audit, require_admin, require_staff, staff_form
-from .services import (STATUS_LABEL, compute_results, delete_election, election_status, generate_codes,
+from .services import (ELECTION_NAME_MAX, STATUS_LABEL, name_problem, short_name, compute_results, delete_election, election_status, generate_codes,
                        participation)
 from .timeutil import parse_local, utcnow
 from .web import flash, render
@@ -65,6 +65,8 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
     error = None
     if not name:
         error = "Bitte einen Namen angeben."
+    elif name_problem(name):
+        error = name_problem(name)
     elif start is None:
         error = "Bitte Start und Ende angeben."
     elif end <= start:
@@ -133,6 +135,9 @@ def settings(request: Request, election_id: int, form=Depends(staff_form), db: S
         flash(request, "Ungültiges Datum.", "error")
         return go(f"/admin/elections/{e.id}")
     name = str(form.get("name", "")).strip() or e.name
+    if name_problem(name):
+        flash(request, name_problem(name), "error")
+        return go(f"/admin/elections/{e.id}")
     if end <= start:
         flash(request, "Das Ende muss nach dem Start liegen.", "error")
     elif end <= utcnow():
@@ -617,7 +622,7 @@ def create_runoff(request: Request, election_id: int, form=Depends(staff_form), 
         return go(f"/admin/elections/{e.id}/dashboard")
     race = result["race"]
     suffix = f" – {race.department.name}" if race.department else ""
-    new = _build_runoff(db, e, [result], f"Stichwahl {race.title}{suffix} ({e.name})")
+    new = _build_runoff(db, e, [result], short_name(f"Stichwahl {race.title}{suffix}", f"({e.name})"))
     audit(db, request, "runoff_created", new.name)
     db.commit()
     flash(request, "Stichwahl angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")
@@ -639,7 +644,7 @@ def create_runoff_all(request: Request, election_id: int, form=Depends(staff_for
     if not chosen:
         flash(request, "Es gibt keinen Wahlgang mit der Entscheidung „Stichwahl durchführen“.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
-    new = _build_runoff(db, e, chosen, f"Stichwahlen ({e.name})")
+    new = _build_runoff(db, e, chosen, short_name("Stichwahlen", f"({e.name})"))
     audit(db, request, "runoff_created", f"{new.name}: {len(chosen)} Wahlgänge")
     db.commit()
     flash(request, f"Stichwahl mit {len(chosen)} Wahlgängen angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")

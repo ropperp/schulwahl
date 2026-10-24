@@ -1,17 +1,21 @@
 {% extends "base.html" %}
 {% block home %}/admin{% endblock %}
-{% block nav %}
+{% block menu %}
   {% if user %}
+  <div class="who"><strong>{{ user.username }}</strong><small>{{ ROLE_LABEL[user.role] }}</small></div>
   <a href="/admin">Wahlen</a>
+  <a href="/admin/account">Mein Konto</a>
   {% if user.role == 'admin' %}
   <a href="/admin/settings">Einstellungen</a>
   <a href="/admin/users">Benutzer</a>
   <a href="/admin/audit">Protokoll</a>
   {% endif %}
-  <a href="/admin/account" title="{{ ROLE_LABEL[user.role] }}">Mein Konto ({{ user.username }})</a>
-  <form method="post" action="/admin/logout" class="inline">
+  <a href="/">Zur Wahlseite</a>
+  <form method="post" action="/admin/logout">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-    <button class="linkbtn" type="submit">Abmelden</button>
+    <button class="out" type="submit">Abmelden</button>
   </form>
+  {% else %}
+  <a href="/">Zur Wahl</a>
   {% endif %}
 {% endblock %}

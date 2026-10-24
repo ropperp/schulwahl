@@ -5,18 +5,36 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
   <title>{% block title %}Wahl{% endblock %} · {{ school_name }}</title>
+  <script src="/static/theme.js"></script>
   {% block head %}{% endblock %}
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/app.js" defer></script>
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="{% block home %}/{% endblock %}">{% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="">{% else %}🗳{% endif %}<span>{{ school_name }}</span></a>
-    <nav>{% block nav %}{% endblock %}</nav>
+    <div class="top-in">
+      <a class="brand{{ ' has-logo' if logo_url }}" href="{% block home %}/{% endblock %}">{% if logo_url %}<img class="logo" src="{{ logo_url }}" alt="">{% endif %}<span>{{ school_name }}</span></a>
+      <nav>
+        <button type="button" class="themetoggle" aria-label="Zwischen hellem und dunklem Design wechseln" title="Hell/Dunkel">
+          <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 1l1.5 3h-3L12 1zm0 22-1.5-3h3L12 23zM1 12l3-1.5v3L1 12zm22 0-3 1.5v-3L23 12zM4.2 4.2l3.2 1-2.2 2.2-1-3.2zm15.6 15.6-3.2-1 2.2-2.2 1 3.2zM19.8 4.2l-1 3.2-2.2-2.2 3.2-1zM4.2 19.8l1-3.2 2.2 2.2-3.2 1z"/></svg>
+        </button>
+        <details class="usermenu">
+          <summary class="burger" aria-label="Menü" title="Menü"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v2.2H3zm0 5h18v2.2H3zm0 5h18v2.2H3z"/></svg></summary>
+          <div class="menu">
+            {% block menu %}
+            <a href="/">Zur Wahl</a>
+            <a href="/vergangene">Vergangene Wahlen</a>
+            {% endblock %}
+          </div>
+        </details>
+      </nav>
+    </div>
   </header>
   <main class="{% block mainclass %}{% endblock %}">
     {% for f in flashes %}<div class="alert {{ 'error' if f.kind == 'error' else 'ok' }}">{{ f.text }}</div>{% endfor %}
     {% block content %}{% endblock %}
   </main>
+  {% include "_footer.html" %}
 </body>
 </html>

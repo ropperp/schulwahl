@@ -35,7 +35,7 @@
   <h2>Name &amp; Zeitfenster</h2>
   <form method="post" action="/admin/elections/{{ e.id }}/settings">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-    <label for="name">Name</label><input id="name" name="name" value="{{ e.name }}" required>
+    <label for="name">Name</label><input id="name" name="name" value="{{ e.name }}" maxlength="40" required>
     <div class="grid2">
       <div><label for="start_at">Start</label><input id="start_at" name="start_at" type="datetime-local" value="{{ e.start_at|localinput }}" required></div>
       <div><label for="end_at">Ende</label><input id="end_at" name="end_at" type="datetime-local" value="{{ e.end_at|localinput }}" required></div>

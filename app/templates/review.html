@@ -2,9 +2,11 @@
 {% block title %}Zusammenfassung{% endblock %}
 {% block mainclass %}narrow{% endblock %}
 {% block content %}
-<section class="card">
+<div class="hero">
   <h1>Bitte prüfen</h1>
-  <p class="muted">Erst mit „Jetzt verbindlich wählen“ wird deine Stimme abgegeben. Danach kann sie nicht mehr geändert werden.</p>
+  <p>Erst mit „Jetzt verbindlich wählen“ wird deine Stimme abgegeben. Danach kann sie nicht mehr geändert werden.</p>
+</div>
+<section class="card">
   <dl class="summary">
     {% for s in summary %}
     <dt>{{ s.race.title }}</dt>
@@ -14,7 +16,7 @@
   <form method="post">
     <input type="hidden" name="code" value="{{ code }}">
     {% for s in summary %}<input type="hidden" name="race_{{ s.race.id }}" value="{{ s.value }}">{% endfor %}
-    <button class="btn primary big" type="submit" formaction="/vote/submit">Jetzt verbindlich wählen</button>
+    <button class="btn primary big go" type="submit" formaction="/vote/submit">Jetzt verbindlich wählen</button>
     <button class="btn big" type="submit" formaction="/vote/start">Zurück und ändern</button>
   </form>
 </section>

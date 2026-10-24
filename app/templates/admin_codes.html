@@ -6,7 +6,7 @@
 {% if status != 'ended' %}
 <section class="card">
   <h2>Codes erzeugen</h2>
-  <form method="post" action="/admin/elections/{{ e.id }}/codes">
+  <form method="post" action="/admin/elections/{{ e.id }}/codes" target="_blank" data-reload-after="1500">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <div class="{{ 'grid3' if e.code_mode == 'class' else 'grid2' }}">
       <div><label for="department_id">Abteilung</label>
@@ -63,7 +63,7 @@
   <table class="plain codes">
     <tr><th>Code</th><th>Abteilung</th>{% if e.code_mode == 'class' %}<th>Klasse</th>{% endif %}<th>Status</th><th></th></tr>
     {% for c in codes %}
-    <tr><td><code>{{ c.code[:3] }} {{ c.code[3:] }}</code></td><td>{{ c.department.name }}</td>{% if e.code_mode == 'class' %}<td>{{ c.group_name }}</td>{% endif %}
+    <tr><td><code>{{ c.code[:3] }} {{ c.code[3:] }}</code></td><td><span class="tag {{ c.department.name|dept_class }}">{{ c.department.name }}</span></td>{% if e.code_mode == 'class' %}<td>{{ c.group_name }}</td>{% endif %}
       <td>{{ '✔ verwendet' if c.used else 'offen' }}</td>
       <td class="num">{% if not c.used and status != 'ended' %}
         <form method="post" action="/admin/codes/{{ c.id }}/delete" class="inline" data-confirm="Code {{ c.code }} löschen? Er funktioniert dann nicht mehr.">

@@ -5,7 +5,7 @@
 {% macro results_block(results, e=None, token=None) %}
 {% for r in results %}
 <section class="card">
-  <h2>{{ r.race.title }}{% if r.department %} <span class="tag">{{ r.department }}</span>{% endif %}</h2>
+  <h2>{{ r.race.title }}{% if r.department %} <span class="tag {{ r.department|dept_class }}">{{ r.department }}</span>{% endif %}</h2>
   {% if token %}
   <div class="decision" id="race-{{ r.race.id }}">
     <p>💡 <strong>{{ 'Empfehlung: Stichwahl durchführen.' if r.recommend else 'Empfehlung: keine Stichwahl nötig.' }}</strong> {{ r.reason }}</p>
@@ -82,7 +82,7 @@
   <table class="bars">
     {% for d in part.departments %}
     <tr>
-      <td class="name">{{ d.name }}</td>
+      <td class="name"><span class="tag {{ d.name|dept_class }}">{{ d.name }}</span></td>
       <td class="barcell">{{ bar(d.percent, 'part') }}</td>
       <td class="num">{{ d.used }} / {{ d.total }} <span class="muted small">({{ '%.1f'|format(d.percent) }} %)</span></td>
     </tr>
