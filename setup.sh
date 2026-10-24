@@ -69,8 +69,14 @@ ask "Name der Schule" "$(get_env SCHOOL_NAME || true)"
 SCHOOL="${REPLY_VAL:-Unsere Schule}"
 valid_secret "$SCHOOL" || { err "Der Schulname darf kein Hochkomma enthalten."; exit 1; }
 
+echo "Das Backoffice hat Benutzerkonten. Jetzt wird der Administrator-Zugang (Benutzername: admin) festgelegt."
+echo "Dieses Passwort gilt nur für den ALLERERSTEN Start. Später ändert man es in der App unter „Mein Konto“,"
+echo "weitere Benutzer (Wahlleiter/innen) legt der Admin dort unter „Benutzer“ an."
+if docker volume ls --format '{{.Name}}' | grep -q '_dbdata$'; then
+  echo "(Es gibt schon eine Datenbank: Das Passwort unten wird dann NICHT mehr verwendet. Vergessen? Siehe docs/BETRIEB.md.)"
+fi
 while true; do
-  ask_secret "Passwort für das Backoffice (mind. 10 Zeichen)"
+  ask_secret "Startpasswort für den Administrator „admin“ (mind. 10 Zeichen)"
   ADMIN_PW="$REPLY_VAL"
   ask_secret "Passwort wiederholen"
   if [ "$ADMIN_PW" != "$REPLY_VAL" ]; then err "Die Passwörter stimmen nicht überein."; continue; fi
@@ -94,6 +100,7 @@ echo "Wie soll die Wahl erreichbar sein?"
 echo "  1) Nur im Schulnetz, ohne HTTPS    (einfach: http://<IP-Adresse>:8080)"
 echo "  2) Mit eigener Domain und HTTPS    (z. B. https://wahl.meineschule.at, Zertifikat automatisch)"
 echo "  3) Im Schulnetz mit HTTPS, ohne Domain (selbstsigniertes Zertifikat, Browserwarnung)"
+echo "  4) Hinter einem vorhandenen Reverse-Proxy der Schule (NGINX, Apache, Traefik ... übernimmt HTTPS)"
 ask "Auswahl" "1"
 MODE="$REPLY_VAL"
 
@@ -114,7 +121,7 @@ case "$MODE" in
     case "$DOMAIN" in *[!A-Za-z0-9.-]*) err "Ungültige Domain."; exit 1;; esac
     PUBLIC_URL="https://$DOMAIN"
     mkdir -p caddy
-    printf '%s {\n\tencode gzip\n\treverse_proxy app:8000\n}\n' "$DOMAIN" > caddy/Caddyfile
+    printf '%s {\n\tencode gzip zstd\n\theader -Server\n\trequest_body {\n\t\tmax_size 9MB\n\t}\n\treverse_proxy app:8000\n}\n' "$DOMAIN" > caddy/Caddyfile
     TRUST=1; COOKIE=1; BIND="127.0.0.1"; PROFILES="https"
     echo
     echo "Voraussetzungen für das Zertifikat: Die Domain zeigt per DNS auf diesen Rechner, und die Ports 80 und 443"
@@ -126,8 +133,26 @@ case "$MODE" in
     case "$HOST" in ''|*[!A-Za-z0-9.-]*) err "Ungültige Adresse."; exit 1;; esac
     PUBLIC_URL="https://$HOST"
     mkdir -p caddy
-    printf ':443 {\n\ttls internal\n\tencode gzip\n\treverse_proxy app:8000\n}\n' > caddy/Caddyfile
+    printf ':443 {\n\ttls internal\n\tencode gzip zstd\n\theader -Server\n\trequest_body {\n\t\tmax_size 9MB\n\t}\n\treverse_proxy app:8000\n}\n' > caddy/Caddyfile
     TRUST=1; COOKIE=1; BIND="127.0.0.1"; PROFILES="https"
+    ;;
+  4)
+    ask "Öffentliche Domain, unter der der Proxy die Wahl anbietet (z. B. wahl.meineschule.at)" ""
+    DOMAIN="$REPLY_VAL"
+    [ -n "$DOMAIN" ] || { err "Bitte eine Domain angeben."; exit 1; }
+    case "$DOMAIN" in *[!A-Za-z0-9.-]*) err "Ungültige Domain."; exit 1;; esac
+    ask "Port, auf dem die App für den Proxy erreichbar sein soll" "8080"
+    PORT="$REPLY_VAL"
+    case "$PORT" in ''|*[!0-9]*) err "Ungültiger Port."; exit 1;; esac
+    echo "Läuft der Proxy auf DEMSELBEN Rechner? Dann bleibt die App nur lokal erreichbar (sicherer)."
+    ask "Proxy auf demselben Rechner? (j/n)" "j"
+    case "$REPLY_VAL" in j|J|y|Y) BIND="127.0.0.1";; *) BIND="0.0.0.0";; esac
+    PUBLIC_URL="https://$DOMAIN"
+    TRUST=1; COOKIE=1
+    echo
+    echo "Wichtig für den Proxy: HTTPS terminieren, an http://<dieser-Rechner>:$PORT weiterreichen und die Header"
+    echo "Host sowie  X-Forwarded-For \$remote_addr  setzen (nicht anhängen!). Vorlage: docs/INSTALLATION.md"
+    [ "$BIND" = "0.0.0.0" ] && echo "Achtung: Port $PORT dann per Firewall NUR für den Proxy freigeben, nicht für alle."
     ;;
   *)
     ask "Adresse/IP, unter der die Handys den Server erreichen" "$(guess_ip)"
@@ -143,6 +168,7 @@ esac
 umask 077
 {
   echo "# Von setup.sh erzeugt am $(date '+%d.%m.%Y %H:%M'). Nicht ins Git einchecken!"
+  echo "# Startpasswort des Benutzers admin - gilt nur beim ersten Start; danach in der App ändern."
   echo "ADMIN_PASSWORD='$ADMIN_PW'"
   echo "DB_PASSWORD='$DB_PW'"
   echo "SECRET_KEY='$SECRET'"
@@ -177,7 +203,10 @@ fi
 
 echo
 bold "Fertig!"
-echo "  Wahlseite: $PUBLIC_URL"
-echo "  Backoffice: $PUBLIC_URL/admin   (Passwort: das eben eingegebene)"
+echo "  Wahlseite:  $PUBLIC_URL"
+echo "  Backoffice: $PUBLIC_URL/admin   (Benutzer: admin, Passwort: das eben eingegebene)"
+echo
+echo "Nächste Schritte: im Backoffice anmelden, unter „Einstellungen“ Schulname, Logo und die QR-Adresse prüfen,"
+echo "unter „Benutzer“ die Wahlleiter/innen anlegen. Ablauf am Wahltag: docs/BETRIEB.md"
 echo
 echo "Später aktualisieren:  git pull && docker compose up -d --build"

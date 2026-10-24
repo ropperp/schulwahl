@@ -1,0 +1,23 @@
+{% extends "admin_base.html" %}
+{% block title %}Mein Konto{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<section class="card">
+  <h1>Mein Konto</h1>
+  <p class="muted">Angemeldet als <strong>{{ user.username }}</strong> ({{ ROLE_LABEL[user.role] }})</p>
+  {% if user.must_change %}<div class="alert error">Bitte wähle jetzt ein eigenes Passwort. Erst danach kannst du das Backoffice benutzen.</div>{% endif %}
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <h2>Passwort ändern</h2>
+  <form method="post" action="/admin/account">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="current_password">Aktuelles Passwort</label>
+    <input id="current_password" name="current_password" type="password" autocomplete="current-password" required>
+    <label for="new_password">Neues Passwort (mind. 10 Zeichen)</label>
+    <input id="new_password" name="new_password" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="new_password2">Neues Passwort wiederholen</label>
+    <input id="new_password2" name="new_password2" type="password" autocomplete="new-password" minlength="10" required>
+    <p class="muted small">Tipp: Mehrere Wörter hintereinander sind lang und leicht zu merken. Nach der Änderung werden alle anderen Anmeldungen dieses Kontos beendet.</p>
+    <button class="btn primary big" type="submit">Passwort ändern</button>
+  </form>
+</section>
+{% endblock %}

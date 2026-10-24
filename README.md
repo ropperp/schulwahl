@@ -1,72 +1,75 @@
 # Schulwahl
 
-Digitale Schulsprecher- und Abteilungssprecherwahl zum Selberhosten (Docker Compose).
-FastAPI + PostgreSQL, mobil optimiert, läuft lokal im Schulnetz.
+Digitale Schulsprecher- und Abteilungssprecherwahl zum Selberhosten (Docker Compose): FastAPI + PostgreSQL, mobil optimiert,
+datensparsam und mit geschütztem Wahlgeheimnis. Gebaut für eine HTL mit ca. 1000–1200 Schüler/innen, getestet mit **1000 gleichzeitigen Wählern**.
+
+> **Du willst die Wahl auf einem Server installieren?** → [`docs/INSTALLATION.md`](docs/INSTALLATION.md) (Schritt für Schritt, auch für die Schul-IT)
+> · Ablauf am Wahltag: [`docs/BETRIEB.md`](docs/BETRIEB.md) · Sicherheit und Tests: [`docs/SICHERHEIT.md`](docs/SICHERHEIT.md)
 
 ## Funktionen
 
 - **Wahlseite für Schüler:** 6-stelliger Code (oder QR-Code scannen) → Stimmzettel → Zusammenfassung → verbindlich abschicken.
-  Schulsprecher/in für alle, Abteilungssprecher/in nur für die Abteilung, zu der der Code gehört. Ungültig wählen ist möglich.
-- **Backoffice** (`/admin`, ein gemeinsames Passwort): je Wahl die Reiter *Übersicht* (Checkliste, Start/Ende, Zeitfenster), *Kandidat/innen*
-  (mit Foto und Klasse, bearbeiten, Wahlgänge umbenennen/sortieren), *Codes* (erzeugen, PDF mit QR-Code, Liste mit Status, Codes löschen) und *Dashboard*.
-  Unter *Einstellungen* stellst du Schulname und Schullogo ein. Die Wahl kann jederzeit vorzeitig beendet werden.
-- **Dashboard:** Beteiligung live je Abteilung (aktualisiert sich alle 10 s). Ergebnisse inkl. ungültiger Stimmen erst **nach Ende** der Wahl.
-  Export als Protokoll-PDF und CSV, optional öffentliche Ergebnisseite.
-- Nach Ende des Zeitfensters (oder nach „Jetzt beenden“) werden keine Stimmen mehr angenommen.
+  Schulsprecher/in für alle, Abteilungssprecher/in nur für die eigene Abteilung. Ungültig wählen ist möglich.
+  Die **Reihenfolge der Kandidat/innen wird für jeden Stimmzettel zufällig gemischt**.
+- **Backoffice** (`/admin`) mit **Benutzerkonten und Rollen**:
+  - **Administrator/in:** alles, zusätzlich *Einstellungen* (Schulname, Logo, **Adresse im QR-Code**), *Benutzer* (Wahlleiter anlegen, deren Passwort zurücksetzen), *Protokoll*, Wahlen löschen.
+  - **Wahlleiter/in:** Wahlen durchführen – Kandidat/innen (mit Foto), Codes (PDF mit QR), Start/Ende, Dashboard, Ergebnis, Stichwahl.
+  - Jede Person ändert ihr Passwort selbst (*Mein Konto*). Einmal-Passwörter erzwingen den Wechsel beim ersten Login.
+- **Dashboard:** Beteiligung live je Abteilung. Ergebnisse inkl. ungültiger Stimmen erst **nach Ende**; Protokoll-PDF, CSV, optional öffentliche Ergebnisseite („Vergangene Wahlen“).
+- **Auswertung:** Platz 1 Sprecher/in, Platz 2 Stellvertreter/in; Stichwahl nur bei Stimmengleichheit (per Klick als neue Wahl).
+- **Wahlgeheimnis:** Stimmen sind nicht mit Codes verknüpft – auch nicht über Datenbank-Interna (Urne, siehe [Sicherheit](docs/SICHERHEIT.md)).
 
-## Schnellstart (Laptop oder Raspberry Pi)
+## Schnellstart
 
 ```bash
-git clone https://github.com/<DEIN-NAME>/schulwahl.git
+git clone https://github.com/ropperp/schulwahl.git
 cd schulwahl
 ./setup.sh
 ```
 
-Das Skript fragt nach Schulname, Backoffice-Passwort und (optional) Datenbank-Passwort, erzeugt alle geheimen Schlüssel selbst,
-schreibt die `.env` und startet danach `docker compose up -d --build`. Du kannst es jederzeit erneut ausführen
-(z. B. um das Backoffice-Passwort zu ändern); das Datenbank-Passwort bleibt dabei erhalten, weil es sich nach dem ersten Start nicht mehr ändern lässt.
+`setup.sh` fragt Schulname, Startpasswort für den Benutzer `admin` und die Betriebsart (nur Schulnetz / eigene Domain mit automatischem HTTPS / selbstsigniert / hinter vorhandenem Reverse-Proxy),
+erzeugt alle geheimen Schlüssel selbst, schreibt die `.env` und startet `docker compose up -d --build`.
+Danach unter `/admin` anmelden (Benutzer `admin`), das Passwort persönlich ändern und unter *Einstellungen* die Adresse für die QR-Codes prüfen.
 
-Drei Betriebsarten stehen zur Wahl:
+Wichtige Befehle:
 
-1. **Nur im Schulnetz, ohne HTTPS:** `http://<IP>:8080` – am einfachsten. QR-Codes funktionieren mit der normalen Handykamera.
-2. **Eigene Domain mit HTTPS:** z. B. `https://wahl.meineschule.at`. Caddy holt automatisch ein Let's-Encrypt-Zertifikat. Voraussetzung:
-   DNS-Eintrag der Domain auf den Pi und Ports 80 und 443 im Router auf den Pi weiterleiten.
-3. **Schulnetz mit HTTPS ohne Domain:** selbstsigniertes Zertifikat (Browser zeigt eine Warnung).
+```bash
+docker compose ps                                   # Status
+docker compose logs app --tail 100                  # Logs (Zugriffe werden absichtlich nicht protokolliert)
+./scripts/backup.sh                                 # Datenbank sichern (Cron-Beispiel in docs/INSTALLATION.md)
+./scripts/restore.sh backups/<datei>.sql.gz         # zurückspielen
+docker compose exec app python -m app.manage reset-password admin   # Notfall: Admin-Passwort vergessen
+python scripts/loadtest.py --url https://wahl.meineschule.at --voters 1000 --spread 30   # Lasttest
+git pull && docker compose up -d --build            # Update (vorher Backup!)
+```
 
-Raspberry Pi: 64-Bit-Raspberry-Pi-OS, Docker installieren (`curl -fsSL https://get.docker.com | sh`, dann `sudo usermod -aG docker $USER` und neu anmelden).
-Backup: `docker compose exec db pg_dump -U schulwahl schulwahl > backup.sql`.
-Update: `git pull && docker compose up -d --build` (die Datenbank wird automatisch erweitert).
+## Leistung
 
-Manuell ohne Skript: `cp .env.example .env`, Werte eintragen, `docker compose up -d --build`.
+Auf einem normalen 4-Kern-Rechner (Docker, 2 App-Prozesse + PostgreSQL) im Lasttest mit 1000 virtuellen Schüler/innen
+(je Stimmzettel mit 10 Kandidatenfotos): alle 1000 Stimmen korrekt gezählt, bei Verteilung über 90 s Antworten im Median unter 50 ms (95 %: unter 0,1 s);
+selbst 1000 Wähler in einer einzigen Sekunde kamen alle durch (mit Wartezeiten von einigen Sekunden). Empfehlung: Klassen nacheinander wählen lassen.
+Mit `scripts/loadtest.py` lässt sich das auf dem eigenen Server nachprüfen.
 
-## Ablauf am Wahltag
+## Konfiguration (`.env`)
 
-1. Backoffice → *Neue Wahl*. Dort legst du fest, ob Codes **pro Abteilung** (datensparsam, empfohlen) oder **pro Klasse** verteilt werden.
-2. Reiter *Kandidat/innen*: Name, Klasse und Foto eintragen (bis zum Start der Wahl jederzeit änderbar).
-3. Reiter *Codes*: Pro Abteilung (bzw. Klasse) Codes erzeugen → PDF drucken, ausschneiden, verteilen. Offene Codes lassen sich einzeln oder gesammelt löschen.
-4. Start/Ende laufen automatisch nach Zeitfenster; die Wahl kann jederzeit vorzeitig beendet werden. Beteiligung im Dashboard beobachten.
-5. Nach Ende: Protokoll-PDF, CSV, Ergebnis veröffentlichen (erscheint unter „Vergangene Wahlen“ auf der Startseite).
-
-**Auswertung:** Platz 1 ist Sprecher/in, Platz 2 Stellvertreter/in. Nur bei Stimmengleichheit um einen dieser Plätze wird eine Stichwahl nötig;
-dann legst du im Dashboard mit einem Klick eine Stichwahl als neue Wahl mit den betroffenen Kandidat/innen an (Codes dafür neu erzeugen).
-Kandidat/innen ohne Stimmen erhalten keinen Platz.
-
-## Wahlgeheimnis & Sicherheit
-
-- Ein Code wird nur als „verwendet“ markiert. Die Stimmen liegen in einer eigenen Tabelle **ohne Verweis auf den Code**, mit Zufalls-ID und ohne Zeitstempel.
-- Stimmen und „Code verbraucht“ werden in **einer Transaktion** geschrieben; ein Code kann auch bei gleichzeitigen Anfragen nur einmal verwendet werden.
-- Admin: Passwort aus `.env`, CSRF-Schutz, Login-Sperre nach 5 Fehlversuchen, Sitzungs-Cookie `SameSite=Strict`. Code-Raten wird per IP begrenzt.
-- Hochgeladene Bilder werden geprüft, verkleinert und neu kodiert (JPG/PNG/WebP, kein SVG).
-- Der Access-Log ist abgeschaltet (QR-Links enthalten den Code).
-- Grenzen: Wer Admin-Zugang oder Datenbankzugriff hat, könnte theoretisch Codes ausdrucken und selbst wählen. Admin-Passwort und Server daher nur an die Wahlleitung geben.
-  Datenschutz: Es werden keine Namen gespeichert; die Schulleitung/der Datenschutzbeauftragte sollte dennoch zustimmen.
+| Variable | Bedeutung |
+|---|---|
+| `ADMIN_PASSWORD` | Startpasswort des Benutzers `admin` – gilt **nur beim allerersten Start**; danach verwaltet die App die Passwörter |
+| `DB_PASSWORD` | Datenbank-Passwort (nach dem ersten Start nicht mehr ändern) |
+| `SECRET_KEY` | Schlüssel für Sitzungs-Cookies (von `setup.sh` erzeugt) |
+| `PUBLIC_URL` | Voreinstellung für die Adresse im QR-Code; im Backoffice unter *Einstellungen* änderbar |
+| `TRUST_PROXY=1`, `COOKIE_SECURE=1` | Nur hinter einem HTTPS-Proxy (setzt `setup.sh`) |
+| `WEB_CONCURRENCY` | Anzahl App-Prozesse (Standard 2) |
+| `CODE_MAX_FAILS`, `LOGIN_MAX_FAILS` | Grenzen für Fehlversuche (Code-Eingabe pro IP / Login pro IP) |
 
 ## Entwicklung
 
 ```bash
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements-dev.txt
-ADMIN_PASSWORD=test python -m pytest              # SQLite
-TEST_DATABASE_URL=postgresql+psycopg://user:pw@host/db python -m pytest   # PostgreSQL
-ADMIN_PASSWORD=test uvicorn app.main:app --reload  # lokal mit SQLite
+ADMIN_PASSWORD=test python -m pytest                                            # SQLite
+TEST_DATABASE_URL=postgresql+psycopg://user:pw@host/db python -m pytest          # PostgreSQL (vor Änderungen an Abstimmung/Auswertung immer auch testen)
+ADMIN_PASSWORD=test uvicorn app.main:app --reload                               # lokal mit SQLite, Login: admin / test
 ```
+
+Struktur und Konventionen für die Weiterentwicklung stehen in [`CLAUDE.md`](CLAUDE.md).

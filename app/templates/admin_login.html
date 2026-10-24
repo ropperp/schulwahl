@@ -1,15 +1,17 @@
 {% extends "admin_base.html" %}
-{% block title %}Admin-Login{% endblock %}
+{% block title %}Anmelden{% endblock %}
 {% block mainclass %}narrow{% endblock %}
 {% block content %}
 <section class="card">
   <h1>Backoffice</h1>
-  {% if disabled %}<div class="alert error">Es ist kein ADMIN_PASSWORD gesetzt. Bitte in der .env-Datei eintragen und neu starten.</div>{% endif %}
+  {% if disabled %}<div class="alert error">Es gibt noch keinen Benutzer. Beim ersten Start wird der Benutzer „admin“ mit dem Passwort aus der Datei .env (ADMIN_PASSWORD) angelegt. Bitte dort eintragen und neu starten (siehe Installationsanleitung).</div>{% endif %}
   {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
   <form method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="username">Benutzername</label>
+    <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus>
     <label for="password">Passwort</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
     <button class="btn primary big" type="submit">Anmelden</button>
   </form>
 </section>
