@@ -11,10 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import config
 from .accounts import bootstrap_admin
 from .db import init_db
-from .routes_account import router as account_router
-from .routes_admin import router as admin_router
-from .routes_public import router as public_router
-from .routes_vote import router as vote_router
+from .routes import auth, candidates, codes, elections, public, settings as settings_routes, users, vote
 from .security import LoginRequired, PasswordChangeRequired
 from .web import render
 
@@ -169,7 +166,6 @@ def robots():
 
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
-app.include_router(vote_router)
-app.include_router(public_router)
-app.include_router(account_router)
-app.include_router(admin_router)
+# Reihenfolge: öffentliche Seiten zuerst; im Backoffice steht "/elections/new" (elections.py) vor "/elections/{id}"
+for module in (vote, public, auth, users, settings_routes, elections, candidates, codes):
+    app.include_router(module.router)

@@ -6,11 +6,11 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .db import get_db
-from . import settings
-from .models import Candidate, Election, Image
-from .services import compute_results, election_status, participation
-from .web import render
+from ..db import get_db
+from .. import settings
+from ..models import Candidate, Election, Image
+from ..services import compute_results, election_status, participation
+from ..web import render
 
 router = APIRouter()
 

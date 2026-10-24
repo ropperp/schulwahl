@@ -22,9 +22,8 @@ def _calls(dependant):
 
 def admin_routes():
     # FastAPI hängt eingebundene Router "lazy" ein; deshalb direkt an den Routern ablesen (Pfade enthalten das Präfix).
-    from app.routes_account import router as account_router
-    from app.routes_admin import router as admin_router
-    routes = [r for router in (account_router, admin_router) for r in router.routes
+    from app.routes import auth, candidates, codes, elections, settings, users
+    routes = [r for router in (m.router for m in (auth, users, settings, elections, candidates, codes)) for r in router.routes
               if isinstance(r, APIRoute) and r.path.startswith("/admin")]
     assert len(routes) >= 30, "Routen nicht gefunden - Test wäre wirkungslos"
     return routes
@@ -278,7 +277,7 @@ def test_voting_before_start_and_after_end_is_blocked(client, db, election):
 def test_code_guessing_is_rate_limited_and_xff_cannot_bypass(client, monkeypatch):
     from app import config
     from app.security import FailureLimiter
-    import app.routes_vote as rv
+    import app.routes.vote as rv
     monkeypatch.setattr(rv, "code_limiter", FailureLimiter(20, 300))
     for i in range(20):
         client.post("/vote/start", data={"code": "AAAAA" + "BCDEFGHJ"[i % 8]}, headers={"X-Forwarded-For": f"10.0.0.{i}"})

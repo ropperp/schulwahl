@@ -243,7 +243,7 @@ def test_invalid_qr_urls_rejected(client, url):
 
 
 def test_qr_url_is_configurable_and_used_for_pdfs(client, db, election, monkeypatch):
-    from app import routes_admin
+    from app.routes import codes as routes_admin
     from tests.conftest import make_codes
     token = admin_login(client)
     r = client.post("/admin/settings", data={"csrf_token": token, "school_name": "S",
@@ -260,7 +260,7 @@ def test_qr_url_is_configurable_and_used_for_pdfs(client, db, election, monkeypa
 
 
 def test_wahlleiter_cannot_override_qr_url_via_query(client, db, election, monkeypatch):
-    from app import routes_admin
+    from app.routes import codes as routes_admin
     from tests.conftest import make_codes
     make_user(db)
     admin_login(client, "leiter", "wahlleiter-passwort")
