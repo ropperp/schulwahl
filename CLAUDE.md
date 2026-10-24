@@ -50,7 +50,7 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 ## Stichwahl-Entscheidung
 - `Race.runoff_decision`: `""` offen, `yes`, `no` (setzt die Wahlleitung pro Wahlgang nach Wahlende, Route `/admin/races/{id}/runoff-decision`; gesperrt solange `results_public`).
 - `services.runoff_advice()` liefert nur die **Empfehlung** (mehr als 2 Kandidat/innen ohne >50 % oder Gleichstand) und den `plan` (Kandidat/innen einer Stichwahl: Gleichstand Platz 1 / Top 2 inkl. Gleichplatzierte / Gleichstand Platz 2 = `deputy`). Die Entscheidung trifft nie das System.
-- Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`. Platz 2 ist immer Stellvertretung (`decide()`).
+- Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`; `runoff-all` fasst alle `yes`-Wahlgänge in EINER neuen Wahl zusammen (`_build_runoff`; Abteilungs-Wahlgänge an ihre Abteilung gebunden, Abteilungen ohne Stichwahl entfallen). Platz 2 ist immer Stellvertretung (`decide()`).
 
 ## Benutzer, Rollen, Sitzungen
 - Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). Erster Start: Benutzer `admin` mit `ADMIN_PASSWORD`.

@@ -44,6 +44,9 @@ sind alle bisherigen Anmeldungen dieses Kontos beendet. Empfehlung: **Vier-Augen
     - *Stichwahl empfohlen*, wenn es mehr als zwei Kandidat/innen gab und niemand mehr als 50 % der gültigen Stimmen hat, oder bei Stimmengleichheit.
     - *Keine Stichwahl empfohlen* bei absoluter Mehrheit oder nur zwei Kandidat/innen (da bringt eine Stichwahl nichts).
     - Mit **„Ja, Stichwahl durchführen“** erscheint der Button *Stichwahl anlegen*: Er legt eine neue Wahl mit den **zwei Bestplatzierten** an (bei Gleichstand um Platz 2 alle Gleichplatzierten). In der Stichwahl ist der/die Unterlegene automatisch **Stellvertreter/in**. Neue Codes erzeugen und drucken.
+    - **Mehrere Stichwahlen gemeinsam:** Haben mehrere Wahlgänge „Ja“, erscheint oben im Dashboard **„Alle Stichwahlen in einer Wahl anlegen“**. Dann gibt es nur **eine** neue Wahl und **einen Code pro Person**; jede/r wählt die Stichwahlen der eigenen Abteilung.
+      Beispiel: Schulsprecher + Abteilungssprecher MB → ET und ME wählen nur den Schulsprecher, MB beide. Nur Abteilungssprecher ET und ME → die Wahl gibt es nur für ET und ME, MB bekommt gar keine Codes.
+      (Der Button „Stichwahl anlegen“ direkt beim Wahlgang legt dagegen eine eigene Wahl nur für diesen einen Wahlgang an.)
     - Mit **„Nein, keine Stichwahl“** gilt das Ergebnis: Platz 1 gewählt, **Platz 2 ist Stellvertreter/in**.
     - Solange bei einem Wahlgang nichts entschieden ist, lässt sich das Ergebnis **nicht veröffentlichen**.
     - Nach dem Veröffentlichen ist die Entscheidung **gesperrt**. Mit *Veröffentlichung zurücknehmen* lässt sie sich ändern (auch wieder „offen“ setzen).
