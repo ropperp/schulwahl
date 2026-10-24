@@ -6,7 +6,7 @@
 {% if status != 'ended' %}
 <section class="card">
   <h2>Codes erzeugen</h2>
-  <form method="post" action="/admin/elections/{{ e.id }}/codes">
+  <form method="post" action="/admin/elections/{{ e.id }}/codes" target="_blank" data-reload-after="1500">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <div class="{{ 'grid3' if e.code_mode == 'class' else 'grid2' }}">
       <div><label for="department_id">Abteilung</label>

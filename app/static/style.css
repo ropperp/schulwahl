@@ -92,6 +92,12 @@ h1 { font-size: 1.75rem; margin: .2rem 0 .6rem; line-height: 1.2; } h2 { font-si
 label { display: block; margin: .9rem 0 .3rem; font-size: .98rem; }
 input, select, textarea { width: 100%; padding: .75rem .9rem; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
 input:focus, select:focus, textarea:focus, .btn:focus-visible, summary:focus-visible, a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* Alle Eingabefelder gleich hoch (Safari/Chrome zeichnen select und number sonst verschieden); select mit eigenem Pfeil */
+input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=hidden]), select { height: 3rem; line-height: 1.2; }
+select { -webkit-appearance: none; appearance: none; padding-right: 2.4rem; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 52%, calc(100% - 14px) 52%; background-size: 6px 6px, 6px 6px; background-repeat: no-repeat; }
+.codeinput { height: auto !important; }
 .codeinput { font: 700 2.1rem/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .25em; text-align: center; text-transform: uppercase; }
 .btn { display: inline-block; padding: .65rem 1.15rem; font-size: 1rem; color: var(--text); background: var(--card); border: 1px solid var(--line);
   border-radius: 999px; cursor: pointer; text-decoration: none; line-height: 1.3; }

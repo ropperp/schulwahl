@@ -198,3 +198,19 @@ def test_woff2_has_correct_mimetype_even_on_minimal_systems():
     import mimetypes
     import app.main  # noqa: F401 - registriert den Typ (schlanke Docker-Images kennen .woff2 nicht)
     assert mimetypes.guess_type("x.woff2")[0] == "font/woff2"
+
+
+def test_form_controls_have_equal_height_and_select_has_own_arrow(client):
+    css = client.get("/static/style.css").text
+    assert re.search(r"input:not\(\[type=checkbox\]\)[^{]*, select \{ height: 3rem", css)
+    assert re.search(r"select \{[^}]*appearance: none", css)
+    assert ".codeinput { height: auto" in css   # große Code-Eingabe bleibt ausgenommen
+
+
+def test_codes_form_opens_pdf_in_new_tab_and_reloads_page(client, election):
+    admin_login(client)
+    html = client.get(f"/admin/elections/{election.id}/codes").text
+    assert re.search(r'<form method="post" action="/admin/elections/\d+/codes" target="_blank" data-reload-after="\d+">', html)
+    assert 'href="/admin/elections/' not in html or 'target="_blank"' in html
+    js = client.get("/static/app.js").text
+    assert "data-reload-after" in js and "location.reload" in js
