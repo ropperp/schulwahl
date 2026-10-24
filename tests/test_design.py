@@ -17,7 +17,7 @@ def test_footer_links_and_credit(client):
     for url in ("https://htl1-klagenfurt.at", "https://htl1-klagenfurt.at/kontakt/", "https://htl1-klagenfurt.at/impressum",
                 "https://htl1-klagenfurt.at/datenschutz/"):
         assert f'href="{url}"' in html
-    assert "Designed with" in html and "Patrick" in html
+    assert "Designed by Patrick" in html and "♥" not in html and "Designed with" not in html
     assert "Lastenstraße 1" in html and "+43 463 56224" in html and "office@htl1-klagenfurt.at" in html
     assert 'rel="noopener"' in html
     assert re.search(r"© \d{4} HTL 1 Lastenstraße", html)

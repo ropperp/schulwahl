@@ -308,7 +308,6 @@ table.bars tr.sub td { padding-top: 0; font-size: .9rem; color: var(--muted); }
 .footer .fbrand img { height: 40px; width: auto; max-width: 160px; object-fit: contain; }
 .footer-bottom { max-width: 1180px; margin: 0 auto; padding: 1rem 16px 1.4rem; border-top: 1px solid rgba(255, 255, 255, .18); display: flex; justify-content: space-between;
   gap: 1rem; flex-wrap: wrap; color: #c7dbe6; font-size: .9rem; }
-.footer-bottom .heart { color: #ff6b7a; }
 
 /* Mobil: Datums-/Zeitfelder (Safari/iOS) sprengen sonst die Karte; Rasterspalten dürfen schrumpfen */
 .grid2 > *, .grid3 > *, .grid3b > *, .grid4 > * { min-width: 0; }
