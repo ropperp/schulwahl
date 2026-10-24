@@ -7,6 +7,7 @@ from sqlalchemy.engine import URL, make_url
 
 
 def _database_url():
+    """Datenbank-Adresse: DATABASE_URL, sonst aus POSTGRES_* (Docker), sonst eine lokale SQLite-Datei (Entwicklung)."""
     url = os.getenv("DATABASE_URL")
     if url:
         return make_url(url)

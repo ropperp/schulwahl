@@ -54,6 +54,7 @@ def _fit_size(text: str, font: str, size: float, max_width: float, min_size: flo
 
 
 def _qr(c: canvas.Canvas, url: str, x: float, y: float, size: float) -> None:
+    """Zeichnet einen QR-Code (schwarz auf weiß) an die angegebene Stelle der PDF-Seite."""
     widget = qr.QrCodeWidget(url, barLevel="M")
     x0, y0, x1, y1 = widget.getBounds()
     d = Drawing(size, size, transform=[size / (x1 - x0), 0, 0, size / (y1 - y0), 0, 0])
@@ -109,6 +110,7 @@ def codes_pdf(election_name: str, items: list[tuple[str, str]], base_url: str) -
 
 def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
                  school_name: str = "", logo: bytes | None = None) -> bytes:
+    """Wahlprotokoll als PDF: Beteiligung, Ergebnisse je Wahlgang, Entscheidung zur Stichwahl, Unterschriftenzeilen (schwarz-weiß)."""
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=18 * mm, bottomMargin=18 * mm, title=f"Wahlprotokoll – {election.name}")

@@ -28,10 +28,11 @@ app/models.py          Election, Department, Race, Candidate, Code, Vote, Pendin
 app/services.py        Status, Codes, cast_vote, flush_ballots (Urne), Auswertung (compute_results, decide), delete_election
 app/security.py        Passwörter (scrypt), Rollen/Abhängigkeiten (require_staff/require_admin, staff_form/admin_form), CSRF, Limiter, audit()
 app/candidate_io.py    Export/Import von Wahlgängen + Kandidaten (JSON, Fotos als Base64, strenge Prüfung vor dem Speichern)
-app/accounts.py        Start-Admin aus ADMIN_PASSWORD, set_password()
+app/accounts.py        Ersteinrichtung (Einrichtungscode, complete_setup), optional Start-Admin aus ADMIN_PASSWORD, set_password()
 app/manage.py          Kommandozeile (list-users, reset-password, create-user)
-app/routes_vote.py     Schülerseite  |  routes_account.py: Login, Konto, Benutzer, Protokoll  |  routes_admin.py: Wahlen, Codes, Einstellungen
-app/routes_public.py   Ergebnis, Archiv, Bilder (Kandidatenfotos kurz im Speicher gecacht)
+app/routes/            vote.py (Schüler) | public.py (Ergebnis, Archiv, Bilder) | auth.py (Login, Ersteinrichtung /admin/setup, Konto) | users.py (Benutzer, Protokoll)
+                       settings.py (Einstellungen) | elections.py (Wahlen, Dashboard, Stichwahlen, Exporte) | candidates.py | codes.py | common.py (Hilfen)
+docs/ENTWICKLUNG.md    Entwickler-Handbuch; app/README.md Dateiübersicht. tests/test_docs.py erzwingt Erklärungssätze (Docstrings) für jede Funktion/Klasse/Datei
 app/settings.py        Schulname/Logo/QR-Adresse aus DB, Cache nur 5 s (mehrere Worker!)
 app/pdfs.py, images.py, timeutil.py, web.py
 scripts/               backup.sh, restore.sh, loadtest.py   |  deploy/nginx.conf.example  |  docs/ (INSTALLATION, BETRIEB, SICHERHEIT)
@@ -59,7 +60,7 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 - Gedruckte PDFs: **nur Schwarz auf Weiß** (Toner sparen); Logos über `pdfs.logo_for_print` (weißes Logo wird schwarze Silhouette). Test: `tests/test_design.py`.
 
 ## Benutzer, Rollen, Sitzungen
-- Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). Erster Start: Benutzer `admin` mit `ADMIN_PASSWORD`.
+- Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). **Ersteinrichtung:** keine Benutzer → `/admin` leitet auf `/admin/setup` (Einrichtungscode aus DB/Log/`manage setup-code` + Admin-Passwort + Schulname + QR-Adresse); danach ist die Seite gesperrt. `ADMIN_PASSWORD` ist nur optional (Tests, automatische Installation).
 - **Jede neue Route unter `/admin` braucht `require_staff`/`require_admin` bzw. `staff_form`/`admin_form`.** `tests/test_security.py` prüft automatisch alle Routen (Login, CSRF, Rollen) und schlägt sonst fehl.
 - Nur Admin: Einstellungen (inkl. QR-Adresse `public_url`), Benutzer, Protokoll, Wahl löschen. Wahlleiter: alles andere.
 - Verwaltungsaktionen mit `audit(db, request, "aktion", "detail")` protokollieren (wird mit dem nächsten `commit` gespeichert).

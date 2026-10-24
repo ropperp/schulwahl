@@ -21,6 +21,7 @@ ELECTION_NAME_MAX = 40
 
 
 def name_problem(name: str) -> str | None:
+    """Fehlermeldung, wenn der Wahlname länger als erlaubt ist, sonst None."""
     if len(name) > ELECTION_NAME_MAX:
         return (f"Der Name ist zu lang ({len(name)} Zeichen, höchstens {ELECTION_NAME_MAX}). "
                 "Er wird auf die Code-Zettel gedruckt und muss dort Platz haben.")
@@ -39,6 +40,7 @@ def short_name(*parts: str) -> str:
 
 
 class VoteError(Exception):
+    """Stimmabgabe nicht möglich; `kind` sagt warum (notfound, used, closed, notstarted, choice)."""
     def __init__(self, message: str, kind: str = "invalid"):
         super().__init__(message)
         self.message = message
@@ -65,6 +67,7 @@ STATUS_LABEL = {"planned": "Geplant", "running": "Läuft", "ended": "Beendet"}
 # ---------------------------------------------------------------- Codes
 
 def normalize_code(raw: str | None) -> str:
+    """Code vereinheitlichen: nur Buchstaben/Ziffern, groß geschrieben (Leerzeichen und Bindestriche egal)."""
     return re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
 
 
@@ -89,6 +92,7 @@ def generate_codes(db: Session, election: Election, department: Department, coun
 # ---------------------------------------------------------------- Stimmabgabe
 
 def lookup_code(db: Session, raw: str | None) -> Code:
+    """Sucht den Code in der Datenbank oder wirft VoteError(notfound)."""
     code = normalize_code(raw)
     found = db.scalar(select(Code).where(Code.code == code)) if len(code) == CODE_LENGTH else None
     if found is None:
@@ -210,6 +214,7 @@ def _wipe_empty_urn(db: Session) -> None:
 # ---------------------------------------------------------------- Auswertung
 
 def participation(db: Session, election: Election) -> dict:
+    """Beteiligung (verwendete/erzeugte Codes) gesamt, je Abteilung und je Klasse."""
     rows = db.execute(
         select(
             Code.department_id,
@@ -222,6 +227,7 @@ def participation(db: Session, election: Election) -> dict:
     ).all()
 
     def pct(used, total):
+        """Prozentwert, 0 bei leerem Nenner."""
         return round(100 * used / total, 1) if total else 0.0
 
     by_dept: dict[int, list[int]] = {}
@@ -320,6 +326,7 @@ def runoff_advice(rows: list[dict], decision: dict, valid: int, runoff_kind: str
 
 
 def compute_results(db: Session, election: Election) -> list[dict]:
+    """Zählt alle Wahlgänge einer beendeten Wahl aus (übernimmt zuerst die Urne), inkl. Konsistenzprüfung und Empfehlung zur Stichwahl."""
     flush_ballots(db, election)
     races = list(
         db.scalars(

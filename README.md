@@ -34,9 +34,10 @@ cd schulwahl
 ./setup.sh
 ```
 
-`setup.sh` fragt Schulname, Startpasswort für den Benutzer `admin` und die Betriebsart (nur Schulnetz / eigene Domain mit automatischem HTTPS / selbstsigniert / hinter vorhandenem Reverse-Proxy),
-erzeugt alle geheimen Schlüssel selbst, schreibt die `.env` und startet `docker compose up -d --build`.
-Danach unter `/admin` anmelden (Benutzer `admin`), das Passwort persönlich ändern und unter *Einstellungen* die Adresse für die QR-Codes prüfen.
+`setup.sh` fragt Datenbank-Passwort, geheimen Schlüssel (automatisch mit `openssl rand -hex 32` oder selbst eingeben), Port und die Betriebsart
+(nur Schulnetz / eigene Domain mit automatischem HTTPS / selbstsigniert / hinter vorhandenem Reverse-Proxy), schreibt die `.env` und startet `docker compose up -d --build`.
+Am Ende zeigt es einen **Einrichtungscode**. Danach `/admin` im Browser öffnen: Die **Ersteinrichtung** legt mit dem Code das Administrator-Passwort, den Schulnamen und die Adresse für die QR-Codes fest
+(alles später im Backoffice änderbar). Es muss kein Passwort in einer Datei stehen.
 
 Wichtige Befehle:
 
@@ -61,9 +62,9 @@ Mit `scripts/loadtest.py` lässt sich das auf dem eigenen Server nachprüfen.
 
 | Variable | Bedeutung |
 |---|---|
-| `ADMIN_PASSWORD` | Startpasswort des Benutzers `admin` – gilt **nur beim allerersten Start**; danach verwaltet die App die Passwörter |
 | `DB_PASSWORD` | Datenbank-Passwort (nach dem ersten Start nicht mehr ändern) |
-| `SECRET_KEY` | Schlüssel für Sitzungs-Cookies (von `setup.sh` erzeugt) |
+| `SECRET_KEY` | Schlüssel für Sitzungs-Cookies (mind. 32 Zeichen; `setup.sh` erzeugt ihn mit `openssl rand -hex 32` oder nimmt deine Eingabe) |
+| `PORT` | Port der App auf diesem Rechner (Standard 8080) |
 | `PUBLIC_URL` | Voreinstellung für die Adresse im QR-Code; im Backoffice unter *Einstellungen* änderbar |
 | `TRUST_PROXY=1`, `COOKIE_SECURE=1` | Nur hinter einem HTTPS-Proxy (setzt `setup.sh`) |
 | `WEB_CONCURRENCY` | Anzahl App-Prozesse (Standard 2) |
@@ -79,4 +80,5 @@ TEST_DATABASE_URL=postgresql+psycopg://user:pw@host/db python -m pytest         
 ADMIN_PASSWORD=test uvicorn app.main:app --reload                               # lokal mit SQLite, Login: admin / test
 ```
 
-Struktur und Konventionen für die Weiterentwicklung stehen in [`CLAUDE.md`](CLAUDE.md).
+**Für Entwickler:** Aufbau, Dateistruktur, Ablauf einer Stimmabgabe, Anleitungen für typische Änderungen und Fehlersuche stehen in [`docs/ENTWICKLUNG.md`](docs/ENTWICKLUNG.md); Dateiübersicht in [`app/README.md`](app/README.md).
+`CLAUDE.md` enthält dieselben Regeln in Kurzform für KI-Programmierassistenten.

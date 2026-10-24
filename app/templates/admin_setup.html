@@ -1,0 +1,36 @@
+{% extends "admin_base.html" %}
+{% block title %}Ersteinrichtung{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<div class="hero">
+  <h1>Ersteinrichtung</h1>
+  <p>Willkommen! Hier legst du den Administrator-Zugang und die Grunddaten fest.</p>
+</div>
+<section class="card">
+  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/setup" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="setup_code">Einrichtungscode</label>
+    <input id="setup_code" name="setup_code" class="codeinput" maxlength="12" autocapitalize="characters" autocorrect="off" spellcheck="false" required autofocus>
+    <p class="muted small">Der Code schützt die Einrichtung davor, dass sie jemand anderes vor dir abschließt. Du findest ihn am Ende von <code>setup.sh</code>
+      oder mit <code>docker compose logs app</code> (Zeile „EINRICHTUNGSCODE“).</p>
+
+    <h2>Administrator</h2>
+    <p class="muted small">Benutzername: <strong>admin</strong>. Das Passwort kannst du später unter „Mein Konto“ ändern.</p>
+    <label for="password">Passwort (mind. 10 Zeichen)</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="10" required>
+    <label for="password2">Passwort wiederholen</label>
+    <input id="password2" name="password2" type="password" autocomplete="new-password" minlength="10" required>
+
+    <h2>Schule</h2>
+    <p class="muted small">Diese Angaben kannst du später im Backoffice unter <strong>Einstellungen</strong> ändern.</p>
+    <label for="school_name">Name der Schule</label>
+    <input id="school_name" name="school_name" value="{{ school_name }}" maxlength="100" required>
+    <label for="public_url">Adresse der Wahlseite (kommt in die QR-Codes)</label>
+    <input id="public_url" name="public_url" value="{{ public_url }}" maxlength="200" inputmode="url" autocapitalize="none" required>
+    <p class="muted small">Genau die Adresse, unter der die Schüler/innen die Wahl erreichen, z. B. <code>https://wahl.htl1-klagenfurt.at</code>.</p>
+
+    <button class="btn primary big go" type="submit">Einrichtung abschließen</button>
+  </form>
+</section>
+{% endblock %}

@@ -18,6 +18,7 @@ _loaded_at = 0.0
 
 
 def get() -> dict:
+    """Aktuelle Einstellungen (Schulname, Logo, QR-Adresse); für 5 Sekunden zwischengespeichert."""
     global _cache, _loaded_at
     if _cache is None or time.monotonic() - _loaded_at > CACHE_SECONDS:
         with SessionLocal() as db:
@@ -31,6 +32,7 @@ def get() -> dict:
 
 
 def invalidate() -> None:
+    """Zwischenspeicher verwerfen (nach dem Speichern)."""
     global _cache
     _cache = None
 
@@ -65,6 +67,7 @@ def clean_public_url(raw: str) -> tuple[str | None, str | None]:
 
 
 def _set(db: Session, key: str, value: str) -> None:
+    """Setzt einen Einstellungswert (legt die Zeile bei Bedarf an), ohne zu committen."""
     row = db.get(Setting, key)
     if row is None:
         db.add(Setting(key=key, value=value))
@@ -74,6 +77,7 @@ def _set(db: Session, key: str, value: str) -> None:
 
 def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, remove_logo: bool = False,
          public_url: str | None = None) -> None:
+    """Speichert Schulname, optional Logo und QR-Adresse und committet (auch andere offene Änderungen derselben Sitzung)."""
     current = get()["logo_id"]
     _set(db, "school_name", school_name)
     if public_url is not None:
