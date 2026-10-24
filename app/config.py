@@ -45,9 +45,6 @@ LOGIN_WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "300"))
 LOGIN_USER_MAX_FAILS = int(os.getenv("LOGIN_USER_MAX_FAILS", "20"))
 LOGIN_USER_WINDOW_SECONDS = int(os.getenv("LOGIN_USER_WINDOW_SECONDS", "600"))
 
-# Entwickler-Notfallzugang (siehe developer_access.py): mit DEVELOPER_ACCESS=off in der .env lässt er sich abschalten
-DEVELOPER_ACCESS = os.getenv("DEVELOPER_ACCESS", "on").strip().lower()
-
 # Größenlimits für Anfragen (Schutz vor Speicher-Flut): Schülerseiten sehr klein, Backoffice wegen Bild-Upload größer
 MAX_BODY_PUBLIC = 32 * 1024
 MAX_BODY_ADMIN = 8 * 1024 * 1024

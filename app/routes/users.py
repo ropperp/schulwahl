@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..accounts import set_password
 from ..db import get_db
-from ..models import HIDDEN_USERNAME, AuditLog, User
+from ..models import AuditLog, User
 from ..security import (ROLE_ADMIN, ROLE_LABEL, ROLE_WAHLLEITER, admin_form, audit, hash_password, normalize_username,
                         random_password, require_admin, username_problem)
 from ..web import flash, render
@@ -16,8 +16,7 @@ router = APIRouter(prefix="/admin")
 
 def _users_page(request: Request, db: Session, status: int = 200, **ctx):
     """Rendert die Benutzerliste (optional mit einmalig angezeigten Zugangsdaten)."""
-    # Der interne Entwickler-Notfallzugang (siehe developer_access.py) erscheint nie in der Liste
-    users = db.scalars(select(User).where(User.username != HIDDEN_USERNAME).order_by(User.role, User.username)).all()
+    users = db.scalars(select(User).order_by(User.role, User.username)).all()
     return render(request, "admin_users.html", status, users=users, error=ctx.pop("error", None),
                   new_credentials=ctx.pop("new_credentials", None), **ctx)
 
@@ -46,9 +45,9 @@ def user_create(request: Request, form=Depends(admin_form), db: Session = Depend
 
 
 def _target(db: Session, admin: User, user_id: int) -> User:
-    """Lädt den Benutzer für Zurücksetzen/Löschen. Nicht erlaubt: sich selbst (dafür gibt es „Mein Konto“) und der interne Zugang."""
+    """Lädt den Benutzer für Zurücksetzen/Löschen. Nicht erlaubt: sich selbst (dafür gibt es „Mein Konto“)."""
     target = db.get(User, user_id)
-    if target is None or target.username == HIDDEN_USERNAME:  # den internen Zugang gibt es hier nicht
+    if target is None:
         raise HTTPException(404, "Benutzer nicht gefunden")
     if target.id == admin.id:
         raise HTTPException(403, "Das eigene Konto verwaltest du unter „Mein Konto“ (Passwort ändern).")
@@ -73,8 +72,7 @@ def user_delete(request: Request, user_id: int, form=Depends(admin_form), admin:
                 db: Session = Depends(get_db)):
     """Löscht einen anderen Benutzer; der letzte sichtbare Administrator bleibt immer erhalten."""
     target = _target(db, admin, user_id)
-    if target.role == ROLE_ADMIN and db.scalar(
-            select(func.count()).select_from(User).where(User.role == ROLE_ADMIN, User.username != HIDDEN_USERNAME)) <= 1:
+    if target.role == ROLE_ADMIN and db.scalar(select(func.count()).select_from(User).where(User.role == ROLE_ADMIN)) <= 1:
         raise HTTPException(403, "Der letzte Administrator kann nicht gelöscht werden.")
     db.delete(target)
     audit(db, request, "user_deleted", target.username)

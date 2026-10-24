@@ -6,7 +6,6 @@ from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
 from . import config, settings
-from .models import DISPLAY_NAME, HIDDEN_USERNAME
 from .security import ROLE_LABEL, csrf_token
 from .services import STATUS_LABEL, election_status
 from .timeutil import fmt_local, input_local
@@ -29,12 +28,6 @@ def dept_class(name) -> str:
     return _DEPT_SHORT.get(n, "")
 
 templates = Jinja2Templates(directory=str(BASE / "templates"))
-def display_user(name) -> str:
-    """Benutzername für die Anzeige im Protokoll (der interne Entwickler-Benutzer wird zu „Entwicklerzugang“)."""
-    return DISPLAY_NAME if name == HIDDEN_USERNAME else (name or "–")
-
-
-templates.env.filters["display_user"] = display_user
 templates.env.filters["dept_class"] = dept_class
 templates.env.filters["local"] = fmt_local
 templates.env.filters["localinput"] = input_local

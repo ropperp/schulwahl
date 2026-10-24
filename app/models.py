@@ -126,11 +126,6 @@ class PendingBallot(Base):
     candidate_id: Mapped[int | None] = mapped_column(ForeignKey("candidates.id"), default=None)
 
 
-# Interner Entwickler-Notfallzugang (siehe developer_access.py): eigene Zeile, die in keiner Liste erscheint
-HIDDEN_USERNAME = "_entwickler"
-DISPLAY_NAME = "Entwicklerzugang"
-
-
 class User(Base):
     """Backoffice-Zugang. Rollen: `admin` (alles) und `wahlleiter` (Wahlen durchführen)."""
 
@@ -145,16 +140,6 @@ class User(Base):
     # Wird bei jeder Passwortänderung erhöht und macht alle bestehenden Sitzungen ungültig.
     session_version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
-
-    @property
-    def display_name(self) -> str:
-        """Name für die Anzeige: der interne Entwickler-Benutzer heißt überall nur „Entwicklerzugang“."""
-        return DISPLAY_NAME if self.username == HIDDEN_USERNAME else self.username
-
-    @property
-    def is_hidden(self) -> bool:
-        """True für den internen Entwickler-Notfallzugang."""
-        return self.username == HIDDEN_USERNAME
 
 
 class AuditLog(Base):

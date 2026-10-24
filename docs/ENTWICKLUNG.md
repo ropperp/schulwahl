@@ -83,7 +83,6 @@ Die **Wahlleitung entscheidet** pro Wahlgang Ja/Nein (`Race.runoff_decision`); e
   `require_staff` / `require_admin` bzw. bei Formularen `staff_form` / `admin_form` verwenden. `tests/test_security.py` prüft das **automatisch für jede Route** und
   schlägt fehl, wenn man es vergisst.
 * **Passwort vergessen:** Ein anderer Administrator setzt es unter „Benutzer“ zurück, sonst `docker compose exec app python -m app.manage reset-password admin`. Mehrere Administratoren sind möglich (Benutzer anlegen → Rolle).
-* **Entwickler-Notfallzugang:** `app/developer_access.py` (nur Hashes, siehe `docs/SICHERHEIT.md`). Hashes erzeugen: `python -m app.passwords`. Im Code erscheint er als Benutzer `_entwickler` (nie in Listen), in der Oberfläche als „Entwicklerzugang".
 
 ## 6. Anleitungen für typische Änderungen
 

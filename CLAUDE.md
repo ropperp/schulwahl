@@ -29,8 +29,6 @@ app/services.py        Status, Codes, cast_vote, flush_ballots (Urne), Auswertun
 app/security.py        Passwörter (scrypt), Rollen/Abhängigkeiten (require_staff/require_admin, staff_form/admin_form), CSRF, Limiter, audit()
 app/candidate_io.py    Export/Import von Wahlgängen + Kandidaten (JSON, Fotos als Base64, strenge Prüfung vor dem Speichern)
 app/accounts.py        Ersteinrichtung (Einrichtungscode, complete_setup), optional Start-Admin aus ADMIN_PASSWORD, set_password()
-app/passwords.py       scrypt-Hashing (nur stdlib); `python -m app.passwords` erzeugt die Hashes für den Entwicklerzugang
-app/developer_access.py Entwickler-Notfallzugang: USERNAME_HASH/PASSWORD_HASH (leer = aus), versteckter User `_entwickler` (models.HIDDEN_USERNAME), Anzeige „Entwicklerzugang"
 app/manage.py          Kommandozeile (list-users, reset-password, create-user)
 app/routes/            vote.py (Schüler) | public.py (Ergebnis, Archiv, Bilder) | auth.py (Login, Ersteinrichtung /admin/setup, Konto) | users.py (Benutzer, Protokoll)
                        settings.py (Einstellungen) | elections.py (Wahlen, Dashboard, Stichwahlen, Exporte) | candidates.py | codes.py | common.py (Hilfen)
@@ -64,7 +62,7 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 ## Benutzer, Rollen, Sitzungen
 - Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). **Ersteinrichtung:** keine Benutzer → `/admin` leitet auf `/admin/setup` (Einrichtungscode aus DB/Log/`manage setup-code` + Admin-Passwort + Schulname + QR-Adresse); danach ist die Seite gesperrt. `ADMIN_PASSWORD` ist nur optional (Tests, automatische Installation).
 - **Jede neue Route unter `/admin` braucht `require_staff`/`require_admin` bzw. `staff_form`/`admin_form`.** `tests/test_security.py` prüft automatisch alle Routen (Login, CSRF, Rollen) und schlägt sonst fehl.
-- **Entwicklerzugang:** nie in Listen/Anzeigen mit echtem Namen (der echte Name existiert nur als Hash), immer im Protokoll als „Entwicklerzugang", abschaltbar mit `DEVELOPER_ACCESS=off`. Zweiter Administrator über Benutzer → Rolle; nie sich selbst/letzten Admin löschen.
+- Zweiter Administrator über Benutzer → Rolle; nie sich selbst/letzten Admin löschen.
 - Nur Admin: Einstellungen (inkl. QR-Adresse `public_url`), Benutzer, Protokoll, Wahl löschen. Wahlleiter: alles andere.
 - Verwaltungsaktionen mit `audit(db, request, "aktion", "detail")` protokollieren (wird mit dem nächsten `commit` gespeichert).
 - QR-Adresse: `settings.public_url(request)` (DB-Einstellung > `PUBLIC_URL` > aktuelle Adresse); nicht per Parameter überschreibbar.

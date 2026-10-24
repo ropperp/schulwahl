@@ -1,5 +1,8 @@
 """Backoffice-Anmeldung (Benutzer, Rollen, Passwörter), CSRF-Schutz und Rate-Limits."""
+import base64
+import hashlib
 import hmac
+import os
 import secrets
 import threading
 import time
@@ -11,8 +14,6 @@ from sqlalchemy.orm import Session
 from . import config
 from .db import get_db
 from .models import AuditLog, User
-# Die Passwort-Funktionen liegen in passwords.py, werden hier aber weiter bereitgestellt (`from .security import hash_password` usw.)
-from .passwords import MAX_PASSWORD_LENGTH, hash_password, normalize_username, verify_password
 
 
 class LoginRequired(Exception):
@@ -89,12 +90,42 @@ ROLE_WAHLLEITER = "wahlleiter"
 ROLE_LABEL = {ROLE_ADMIN: "Administrator/in", ROLE_WAHLLEITER: "Wahlleiter/in"}
 
 MIN_PASSWORD_LENGTH = 10
+MAX_PASSWORD_LENGTH = 200
+_SCRYPT_N, _SCRYPT_R, _SCRYPT_P = 2 ** 14, 8, 1  # ca. 16 MB RAM, auch auf einem Raspberry Pi flott genug
 _WEAK = {"passwort123", "password123", "1234567890", "0123456789", "qwertzuiop", "qwertyuiop", "passwort12",
          "schulwahl1", "willkommen1", "wahlleiter1"}
 
 
-# Diese drei Namen liegen in passwords.py und werden hier nur weitergereicht (Routen/Tests importieren sie von hier)
-__all__ = ["hash_password", "normalize_username", "verify_password"]
+def _b64(raw: bytes) -> str:
+    """Bytes als Base64-Text."""
+    return base64.b64encode(raw).decode()
+
+
+def hash_password(password: str) -> str:
+    """Passwort-Hash mit scrypt und zufälligem Salz: `scrypt$N$r$p$salt$hash`."""
+    salt = os.urandom(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=32)
+    return f"scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${_b64(salt)}${_b64(digest)}"
+
+
+def verify_password(password: str, stored: str) -> bool:
+    """Prüft ein Passwort gegen einen gespeicherten Hash (zeitkonstant)."""
+    try:
+        scheme, n, r, p, salt, digest = stored.split("$")
+        if scheme != "scrypt":
+            return False
+        expected = base64.b64decode(digest)
+        actual = hashlib.scrypt(password.encode()[:MAX_PASSWORD_LENGTH * 4], salt=base64.b64decode(salt),
+                                n=int(n), r=int(r), p=int(p), dklen=len(expected))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(actual, expected)
+
+
+def normalize_username(raw: str) -> str:
+    """Benutzernamen vereinheitlichen (Leerzeichen am Rand weg, Kleinschreibung)."""
+    return raw.strip().lower()
+
 
 _DUMMY_HASH = hash_password(secrets.token_hex(8))
 
