@@ -563,9 +563,47 @@ def codes_download(election_id: int, request: Request, batch: str = "", departme
 
 # ------------------------------------------------------------ Stichwahl
 
+def runoff_departments(e: Election, results: list[dict]) -> list[Department]:
+    """Abteilungen, die an den Stichwahlen teilnehmen: alle, sobald ein Wahlgang für alle gilt, sonst nur die betroffenen."""
+    if any(r["race"].department_id is None for r in results):
+        return list(e.departments)
+    ids = {r["race"].department_id for r in results}
+    return [d for d in e.departments if d.id in ids]
+
+
+def runoff_candidates(results: list[dict]) -> list[dict]:
+    """Wahlgänge, bei denen die Wahlleitung „Stichwahl: ja“ entschieden hat und Kandidat/innen antreten."""
+    return [r for r in results if r["decision"] == "yes" and r["plan"]]
+
+
+def _build_runoff(db: Session, e: Election, results: list[dict], name: str) -> Election:
+    """Legt EINE neue (geplante) Wahl mit den Stichwahl-Wahlgängen an. Wahlgänge einer Abteilung gelten nur für diese."""
+    start = utcnow() + timedelta(hours=1)
+    new = Election(name=name, start_at=start, end_at=start + timedelta(hours=8), code_mode=e.code_mode)
+    new.departments = [Department(name=d.name) for d in runoff_departments(e, results)]
+    db.add(new)
+    db.flush()
+    new_dept = {d.name: d for d in new.departments}
+    old_dept = {d.id: d for d in e.departments}
+    for position, result in enumerate(results):
+        race = result["race"]
+        dept_id = new_dept[old_dept[race.department_id].name].id if race.department_id else None
+        new_race = Race(election_id=new.id, department_id=dept_id, title=f"Stichwahl {race.title}",
+                        runoff_kind=result["plan_kind"], position=position)
+        db.add(new_race)
+        db.flush()
+        for c in result["plan"]:
+            copy = Candidate(race_id=new_race.id, name=c.name, info=c.info)
+            if c.image_id:
+                src = db.get(Image, c.image_id)
+                copy.image_id = _store_image(db, (src.data, src.content_type))
+            db.add(copy)
+    return new
+
+
 @router.post("/elections/{election_id}/runoff")
 def create_runoff(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
-    """Legt bei Stimmengleichheit eine Stichwahl als neue (geplante) Wahl an."""
+    """Legt für EINEN Wahlgang (Entscheidung „Stichwahl: ja“) eine Stichwahl als neue (geplante) Wahl an."""
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         flash(request, "Eine Stichwahl kann erst nach Ende der Wahl angelegt werden.", "error")
@@ -574,31 +612,37 @@ def create_runoff(request: Request, election_id: int, form=Depends(staff_form), 
     if result is None or result["decision"] != "yes":
         flash(request, "Bitte zuerst bei diesem Wahlgang entscheiden: „Stichwahl durchführen“.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
-    kind, tied = result["plan_kind"], result["plan"]
-    if not tied:
+    if not result["plan"]:
         flash(request, "Für diesen Wahlgang gibt es keine zwei Kandidat/innen mit Stimmen - keine Stichwahl möglich.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
     race = result["race"]
     suffix = f" – {race.department.name}" if race.department else ""
-    start = utcnow() + timedelta(hours=1)
-    new = Election(name=f"Stichwahl {race.title}{suffix} ({e.name})", start_at=start, end_at=start + timedelta(hours=8),
-                   code_mode=e.code_mode)
-    depts = [d for d in e.departments if race.department_id in (None, d.id)]
-    new.departments = [Department(name=d.name) for d in depts]
-    db.add(new)
-    db.flush()
-    new_race = Race(election_id=new.id, title=f"Stichwahl {race.title}", runoff_kind=kind, position=0)
-    new.races.append(new_race)
-    db.flush()
-    for c in tied:
-        copy = Candidate(race_id=new_race.id, name=c.name, info=c.info)
-        if c.image_id:
-            src = db.get(Image, c.image_id)
-            copy.image_id = _store_image(db, (src.data, src.content_type))
-        db.add(copy)
+    new = _build_runoff(db, e, [result], f"Stichwahl {race.title}{suffix} ({e.name})")
     audit(db, request, "runoff_created", new.name)
     db.commit()
     flash(request, "Stichwahl angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")
+    return go(f"/admin/elections/{new.id}")
+
+
+@router.post("/elections/{election_id}/runoff-all")
+def create_runoff_all(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Fasst ALLE Wahlgänge mit Entscheidung „Stichwahl: ja“ in einer einzigen neuen Wahl zusammen.
+
+    Jede/r wählt mit einem Code alle Stichwahlen, die für die eigene Abteilung gelten. Abteilungen ohne Stichwahl
+    (nur Abteilungssprecher betroffen) kommen in der neuen Wahl gar nicht vor.
+    """
+    e = get_election(db, election_id)
+    if election_status(e) != "ended":
+        flash(request, "Eine Stichwahl kann erst nach Ende der Wahl angelegt werden.", "error")
+        return go(f"/admin/elections/{e.id}/dashboard")
+    chosen = runoff_candidates(compute_results(db, e))
+    if not chosen:
+        flash(request, "Es gibt keinen Wahlgang mit der Entscheidung „Stichwahl durchführen“.", "error")
+        return go(f"/admin/elections/{e.id}/dashboard")
+    new = _build_runoff(db, e, chosen, f"Stichwahlen ({e.name})")
+    audit(db, request, "runoff_created", f"{new.name}: {len(chosen)} Wahlgänge")
+    db.commit()
+    flash(request, f"Stichwahl mit {len(chosen)} Wahlgängen angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")
     return go(f"/admin/elections/{new.id}")
 
 
@@ -609,7 +653,10 @@ def dashboard(request: Request, election_id: int, db: Session = Depends(get_db),
     e = get_election(db, election_id)
     status = election_status(e)
     results = compute_results(db, e) if status == "ended" else None
-    return render(request, "admin_dashboard.html", e=e, status=status, part=participation(db, e), results=results, tab="dashboard")
+    combined = runoff_candidates(results) if results else []
+    return render(request, "admin_dashboard.html", e=e, status=status, part=participation(db, e), results=results,
+                  combined=combined, combined_depts=[d.name for d in runoff_departments(e, combined)] if combined else [],
+                  tab="dashboard")
 
 
 def _ended_or_redirect(request, e):
