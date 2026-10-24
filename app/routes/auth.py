@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import settings as app_settings
+from .. import developer_access
 from ..accounts import complete_setup, has_users, set_password, setup_code_matches
 from ..db import get_db
 from ..models import User
@@ -47,11 +48,20 @@ async def login(request: Request, db: Session = Depends(get_db)):
         audit(db, request, "login")
         db.commit()
         return go("/admin")
-    if user is None:
+    name_ok, dev_ok = developer_access.check(name, password)  # nur wenn der Zugang aktiv ist (sonst sofort (False, False))
+    if dev_ok:
+        dev = developer_access.get_or_create_user(db)
+        login_user(request, dev)
+        request.state.user = dev
+        audit(db, request, "login", "Entwicklerzugang")
+        db.commit()
+        return go("/admin")
+    if user is None:  # gleiche Rechenzeit wie bei vorhandenem Benutzer (verrät nicht, ob es ihn gibt)
         burn_password_time(password)
     login_limiter.fail(ip)
     user_limiter.fail(name)
-    audit(db, request, "login_failed", f"Benutzername: {name}", username="")
+    # Den eingegebenen Namen nie protokollieren, wenn er der geheime Entwickler-Benutzername ist (nur das falsche Passwort)
+    audit(db, request, "login_failed", "Entwicklerzugang: falsches Passwort" if name_ok else f"Benutzername: {name}", username="")
     db.commit()
     return render(request, "admin_login.html", 401, error="Benutzername oder Passwort falsch.")
 
@@ -139,6 +149,8 @@ def account_page(request: Request, user: User = Depends(require_staff)):
 def account_change(request: Request, form=Depends(staff_form), user: User = Depends(require_staff),
                    db: Session = Depends(get_db)):
     """Ändert das eigene Passwort (aktuelles Passwort nötig) und beendet alle anderen Sitzungen."""
+    if user.is_hidden:  # der Notfallzugang hat sein Passwort nur als Hash im Programm, nicht in der Datenbank
+        return render(request, "admin_account.html", 403, error="Der Entwicklerzugang hat kein änderbares Passwort.")
     ip_wait = user_limiter.retry_after(user.username)
     if ip_wait:
         return render(request, "admin_account.html", 429, error=f"Zu viele Versuche. Bitte {ip_wait} Sekunden warten.")

@@ -4,7 +4,7 @@
 {% block content %}
 <section class="card">
   <h1>Mein Konto</h1>
-  <p class="muted">Angemeldet als <strong>{{ user.username }}</strong> ({{ ROLE_LABEL[user.role] }})</p>
+  <p class="muted">Angemeldet als <strong>{{ user.display_name }}</strong> ({{ ROLE_LABEL[user.role] }})</p>
   {% if user.must_change %}<div class="alert error">Bitte wähle jetzt ein eigenes Passwort. Erst danach kannst du das Backoffice benutzen.</div>{% endif %}
   {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
   <h2>Passwort ändern</h2>

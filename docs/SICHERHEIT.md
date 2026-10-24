@@ -36,6 +36,8 @@ Die Tests laufen bei jedem Commit automatisch (GitHub Actions, `.github/workflow
 | CSRF | Token in jedem POST (Test prüft **alle** POST-Routen automatisch) |
 | Protokoll | Anmeldungen, Passwortänderungen, Codes, Start/Ende, Löschungen – mit Benutzer und IP (nur Administratoren sehen es) |
 | Notfallzugang | Nur über den Server: `python -m app.manage reset-password` |
+| Entwickler-Notfallzugang | Siehe Abschnitt „Entwickler-Notfallzugang“ unten |
+| Zweiter Administrator | Im Backoffice unter „Benutzer“ anlegbar; ein Administrator kann andere zurücksetzen/löschen, aber nie sich selbst; der letzte sichtbare Administrator bleibt erhalten |
 | Ersteinrichtung | Es steht kein Passwort in einer Datei. Eine frische Installation erzeugt einen **Einrichtungscode** (8 Zeichen, nur auf dem Server sichtbar); ohne ihn kann niemand den Administrator anlegen. Falsche Codes werden gesperrt (5 Versuche/5 min pro IP) und protokolliert; nach der Einrichtung ist die Seite gesperrt (Tests: `test_setup.py`) |
 
 ## Schutz gegen typische Angriffe – was getestet wurde
@@ -61,6 +63,18 @@ Die Tests laufen bei jedem Commit automatisch (GitHub Actions, `.github/workflow
 | Vorzeitiges Auslesen von Ergebnissen | Ergebnisse, CSV, Protokoll erst nach Ende; öffentlich nur nach Freigabe | `test_results_hidden_until_end_and_publication` |
 | API-Dokumentation/Fehlerseiten verraten Interna | `/docs`, `/openapi.json` aus; keine Stacktraces; `Server`-Header entfernt | `test_no_api_docs_exposed` |
 | Verlust/Beschädigung von Sicherungen | Backup prüft Vollständigkeit; Restore prüft **vor** dem Löschen | manuell getestet (kaputte Datei, gestoppte DB) |
+
+## Entwickler-Notfallzugang
+
+Für den Fall, dass keine Anmeldung mehr funktioniert (alle Passwörter verloren, niemand mit Server-Zugang erreichbar), gibt es einen **fest hinterlegten Zugang mit Administrator-Rechten** für die ursprünglichen Entwickler/innen.
+Transparenz ist wichtig, weil ein solcher Zugang mächtig ist – deshalb gilt:
+
+* **Nur Hashes, kein Klartext:** Weder Benutzername noch Passwort stehen im Programm, nur zwei scrypt-Hashes in `app/developer_access.py`. Ohne beide Hashes ist der Zugang **aus**.
+* **Nicht unsichtbar:** Der Zugang erscheint in keiner Benutzerliste und lässt sich nicht über das Backoffice ändern, **aber jede Anmeldung und jede Aktion steht im Protokoll als „Entwicklerzugang“** (Administratoren sehen das). Der Benutzername selbst wird nie angezeigt oder protokolliert (auch bei falschem Passwort nicht).
+* **Die Schule hat die Kontrolle:** `DEVELOPER_ACCESS=off` in der `.env` und `docker compose up -d` schaltet ihn ab. Auf dem Server kann der Zugang außerdem jederzeit geprüft werden (`SELECT username FROM users` zeigt die interne Zeile `_entwickler`; erst nach einer Anmeldung vorhanden).
+* **Gleiche Schutzmaßnahmen wie jede Anmeldung:** Sperre nach Fehlversuchen (pro IP und Name), gleiche Antwortzeit, keine Passwortänderung in der App.
+* **Passwortstärke:** Das Passwort muss mind. 16 Zeichen haben; Hash erzeugen mit `python -m app.passwords` (Eingabe unsichtbar). Wer das Repository liest, sieht nur die Hashes – bei einem zufälligen langen Passwort sind sie praktisch nicht zu knacken.
+* **Empfehlung:** Dem Informatik-Lehrer/der Schulleitung die Existenz dieses Zugangs mitteilen und ihn abschalten, sobald die Entwickler/innen nicht mehr gebraucht werden.
 
 ## Betrieb / Infrastruktur
 

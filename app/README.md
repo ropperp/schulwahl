@@ -10,6 +10,8 @@ Ausführliche Erklärung: [`docs/ENTWICKLUNG.md`](../docs/ENTWICKLUNG.md). Jede 
 | `models.py` | Tabellen als Python-Klassen (Wahl, Wahlgang, Kandidat, Code, Stimme, Urne, Benutzer, Protokoll …) |
 | `services.py` | Fachlogik: Code prüfen, Stimme abgeben, Urne leeren, auszählen, Stichwahl-Empfehlung |
 | `security.py` | Passwörter, Anmeldung/Rollen, CSRF-Schutz, Sperre bei Fehlversuchen, Protokoll |
+| `passwords.py` | Passwort-Hashing (scrypt), nur Standardbibliothek; `python -m app.passwords` erzeugt die Hash-Zeilen für den Entwicklerzugang |
+| `developer_access.py` | Entwickler-Notfallzugang (nur als Hash hinterlegt, versteckt in Listen, im Protokoll sichtbar, per `.env` abschaltbar) |
 | `accounts.py` | Benutzer anlegen, Passwort setzen, Ersteinrichtung (Einrichtungscode) |
 | `settings.py` | Einstellungen aus der Datenbank: Schulname, Logo, Adresse im QR-Code |
 | `candidate_io.py` | Kandidaten exportieren/importieren (Datei, mit strenger Prüfung) |

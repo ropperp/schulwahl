@@ -2,7 +2,7 @@
 {% block home %}/admin{% endblock %}
 {% block menu %}
   {% if user %}
-  <div class="who"><strong>{{ user.username }}</strong><small>{{ ROLE_LABEL[user.role] }}</small></div>
+  <div class="who"><strong>{{ user.display_name }}</strong><small>{{ ROLE_LABEL[user.role] }}</small></div>
   <a href="/admin">Wahlen</a>
   <a href="/admin/account">Mein Konto</a>
   {% if user.role == 'admin' %}
