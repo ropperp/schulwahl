@@ -41,6 +41,7 @@ _NEW_COLUMNS = [
     ("candidates", "image_id", "INTEGER REFERENCES images(id)"),
     ("elections", "code_mode", "VARCHAR(20) NOT NULL DEFAULT 'department'"),
     ("races", "runoff_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("races", "runoff_decision", "VARCHAR(10) NOT NULL DEFAULT ''"),
     ("codes", "group_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
 ]
 

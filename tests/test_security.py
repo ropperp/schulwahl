@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from app.main import app
 from app.security import require_admin, require_staff
-from tests.conftest import admin_login, ballot_choices, make_codes, make_user
+from tests.conftest import admin_login, ballot_choices, decide_all, make_codes, make_user
 
 
 def _calls(dependant):
@@ -172,6 +172,7 @@ def test_hostile_names_are_escaped_everywhere(client, db, election):
     pages += [client.get(f"/admin/elections/{election.id}/candidates").text, client.get(f"/admin/elections/{election.id}").text,
               client.get(f"/admin/elections/{election.id}/codes").text, client.get("/admin").text]
     client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    decide_all(client, db, election, token)
     client.post(f"/admin/elections/{election.id}/publish", data={"csrf_token": token})
     pages += [client.get(f"/admin/elections/{election.id}/dashboard").text, client.get(f"/ergebnis/{election.id}").text,
               client.get("/vergangene").text]
@@ -394,6 +395,7 @@ def test_results_hidden_until_end_and_publication(client, db, election):
     assert client.get(f"/admin/elections/{election.id}/protocol.pdf").status_code == 303
     client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
     assert client.get(f"/ergebnis/{election.id}").status_code == 404  # beendet, aber nicht veröffentlicht
+    decide_all(client, db, election, token)
     client.post(f"/admin/elections/{election.id}/publish", data={"csrf_token": token})
     assert client.get(f"/ergebnis/{election.id}").status_code == 200
 

@@ -130,19 +130,32 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
         story.append(t)
         names = lambda cs: ", ".join(c.name for c in cs)  # noqa: E731
         lines = []
-        if r["winner"]:
-            label = "Gewählt als Stellvertreter/in" if r["race"].runoff_kind == "deputy" else "Gewählt"
-            lines.append(f"{label}: {r['winner'].name}")
-        if r["runoff_first"]:
-            lines.append(f"Stimmengleichheit um Platz 1 zwischen: {names(r['runoff_first'])} – Stichwahl nötig")
-        if r["deputy"]:
-            lines.append(f"Stellvertreter/in: {r['deputy'].name}")
-        elif r["runoff_second"]:
-            lines.append(f"Stimmengleichheit um Platz 2 zwischen: {names(r['runoff_second'])} – Stichwahl nötig")
-        elif r["deputy_pending"]:
-            lines.append("Stellvertretung ergibt sich nach der Stichwahl.")
-        if not lines:
-            lines.append("Kein Ergebnis (keine gültigen Stimmen)")
+        if r["decision"] == "yes":
+            lines.append("Entscheidung der Wahlleitung: Stichwahl wird durchgeführt")
+        elif r["decision"] == "no":
+            lines.append("Entscheidung der Wahlleitung: keine Stichwahl")
+        result_lines = []
+        yes_plan = r["decision"] == "yes" and r["plan"]
+        tie_suffix = " – ohne Stichwahl entscheidet die Wahlleitung" if r["decision"] == "no" else " – Stichwahl nötig"
+        if yes_plan and r["plan_kind"] == "speaker":
+            result_lines.append(f"Stichwahl um Platz 1 und die Stellvertretung zwischen: {names(r['plan'])}")
+        else:
+            if r["winner"]:
+                label = "Gewählt als Stellvertreter/in" if r["race"].runoff_kind == "deputy" else "Gewählt"
+                result_lines.append(f"{label}: {r['winner'].name}")
+            if r["runoff_first"]:
+                result_lines.append(f"Stimmengleichheit um Platz 1 zwischen: {names(r['runoff_first'])}{tie_suffix}")
+            if r["deputy"]:
+                result_lines.append(f"Stellvertreter/in: {r['deputy'].name}")
+            elif yes_plan:
+                result_lines.append(f"Stichwahl um die Stellvertretung zwischen: {names(r['plan'])}")
+            elif r["runoff_second"]:
+                result_lines.append(f"Stimmengleichheit um Platz 2 zwischen: {names(r['runoff_second'])}{tie_suffix}")
+            elif r["deputy_pending"]:
+                result_lines.append("Stellvertretung ergibt sich nach Klärung des Gleichstands.")
+        if not result_lines:
+            result_lines.append("Kein Ergebnis (keine gültigen Stimmen)")
+        lines += result_lines
         for line in lines:
             story.append(Paragraph(f"<b>{escape(line)}</b>", styles["Normal"]))
         if not r["consistent"]:

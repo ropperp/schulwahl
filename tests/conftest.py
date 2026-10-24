@@ -111,3 +111,11 @@ def vote_count(db):
 def csrf(client):
     page = client.get("/admin/account")  # erreichbar für jede angemeldete Person, auch vor dem ersten Passwortwechsel
     return re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
+
+
+def decide_all(client, db, election, token, answer="no"):
+    """Wahlleitung entscheidet bei allen Wahlgängen (Voraussetzung zum Veröffentlichen)."""
+    from app.models import Race
+    for race in db.query(Race).filter(Race.election_id == election.id):
+        r = client.post(f"/admin/races/{race.id}/runoff-decision", data={"csrf_token": token, "answer": answer})
+        assert r.status_code == 303

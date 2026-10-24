@@ -6,23 +6,57 @@
 {% for r in results %}
 <section class="card">
   <h2>{{ r.race.title }}{% if r.department %} <span class="tag">{{ r.department }}</span>{% endif %}</h2>
+  {% if token %}
+  <div class="decision" id="race-{{ r.race.id }}">
+    <p>💡 <strong>{{ 'Empfehlung: Stichwahl durchführen.' if r.recommend else 'Empfehlung: keine Stichwahl nötig.' }}</strong> {{ r.reason }}</p>
+    {% if r.decision == 'yes' %}<p>✅ Eure Entscheidung: <strong>Stichwahl wird durchgeführt.</strong></p>
+    {% elif r.decision == 'no' %}<p>✅ Eure Entscheidung: <strong>keine Stichwahl.</strong></p>
+    {% else %}<p class="alert error">Entscheidung offen – soll bei diesem Wahlgang eine Stichwahl durchgeführt werden? Ohne Entscheidung kann das Ergebnis nicht veröffentlicht werden.</p>{% endif %}
+    {% if e.results_public %}
+    <p class="muted small">🔒 Das Ergebnis ist veröffentlicht, die Entscheidung ist gesperrt. Zum Ändern zuerst „Veröffentlichung zurücknehmen“.</p>
+    {% else %}
+    <div class="row gap wrap">
+      {% for value, label, strong in (('yes', 'Ja, Stichwahl durchführen', r.recommend), ('no', 'Nein, keine Stichwahl', not r.recommend)) %}
+      {% if r.decision != value %}
+      <form method="post" action="/admin/races/{{ r.race.id }}/runoff-decision" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ token }}"><input type="hidden" name="answer" value="{{ value }}">
+        <button class="btn {{ 'primary' if strong }}">{{ label }}{{ ' (empfohlen)' if strong }}</button></form>
+      {% endif %}
+      {% endfor %}
+      {% if r.decision %}
+      <form method="post" action="/admin/races/{{ r.race.id }}/runoff-decision" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ token }}"><input type="hidden" name="answer" value="">
+        <button class="btn ghost">Entscheidung zurücknehmen</button></form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="outcome">
-    {% if r.winner %}<p>🏆 {{ 'Gewählt als Stellvertreter/in' if r.race.runoff_kind == 'deputy' else 'Gewählt' }}: <strong>{{ cand(r.winner, True) }}</strong></p>{% endif %}
-    {% if r.runoff_first %}
-      <div class="tiebox">⚖ <strong>Stimmengleichheit um Platz 1:</strong> {{ r.runoff_first|map(attribute='name')|join(', ') }}. Es ist eine Stichwahl nötig.
+    {% set runoff_yes = r.decision == 'yes' and r.plan %}
+    {% if r.winner and not (runoff_yes and r.plan_kind == 'speaker') %}<p>🏆 {{ 'Gewählt als Stellvertreter/in' if r.race.runoff_kind == 'deputy' else 'Gewählt' }}: <strong>{{ cand(r.winner, True) }}</strong></p>{% endif %}
+    {% if runoff_yes %}
+      <div class="tiebox">⚖ <strong>Stichwahl {{ 'um die Stellvertretung ' if r.plan_kind == 'deputy' }}nötig</strong> zwischen: {{ r.plan|map(attribute='name')|join(', ') }}.
+        {% if r.plan_kind == 'speaker' %}Platz 1 und die Stellvertretung ergeben sich aus der Stichwahl.{% endif %}
         {% if token %}<form method="post" action="/admin/elections/{{ e.id }}/runoff" class="inline" data-confirm="Stichwahl als neue Wahl anlegen?">
-          <input type="hidden" name="csrf_token" value="{{ token }}"><input type="hidden" name="race_id" value="{{ r.race.id }}"><input type="hidden" name="kind" value="speaker">
+          <input type="hidden" name="csrf_token" value="{{ token }}"><input type="hidden" name="race_id" value="{{ r.race.id }}">
           <button class="btn small">Stichwahl anlegen</button></form>{% endif %}</div>
+    {% elif r.decision == 'yes' %}
+      <p class="muted">Stichwahl gewünscht, aber es gibt keine zwei Kandidat/innen mit Stimmen.</p>
+    {% else %}
+      {% if r.runoff_first %}
+      <div class="tiebox">⚖ <strong>Stimmengleichheit um Platz 1:</strong> {{ r.runoff_first|map(attribute='name')|join(', ') }}.
+        {{ 'Ohne Stichwahl muss die Wahlleitung entscheiden.' if r.decision == 'no' else 'Eine Stichwahl wird empfohlen.' }}</div>
+      {% endif %}
+      {% if r.deputy %}<p>🥈 Stellvertreter/in: <strong>{{ cand(r.deputy, True) }}</strong></p>
+      {% elif r.runoff_second %}
+      <div class="tiebox">⚖ <strong>Stimmengleichheit um Platz 2 (Stellvertretung):</strong> {{ r.runoff_second|map(attribute='name')|join(', ') }}.
+        {{ 'Ohne Stichwahl muss die Wahlleitung entscheiden.' if r.decision == 'no' else 'Eine Stichwahl wird empfohlen.' }}</div>
+      {% elif r.deputy_pending %}<p class="muted">Die Stellvertretung ergibt sich nach Klärung des Gleichstands.</p>
+      {% endif %}
     {% endif %}
-    {% if r.deputy %}<p>🥈 Stellvertreter/in: <strong>{{ cand(r.deputy, True) }}</strong></p>
-    {% elif r.runoff_second %}
-      <div class="tiebox">⚖ <strong>Stimmengleichheit um Platz 2 (Stellvertretung):</strong> {{ r.runoff_second|map(attribute='name')|join(', ') }}. Es ist eine Stichwahl nötig.
-        {% if token %}<form method="post" action="/admin/elections/{{ e.id }}/runoff" class="inline" data-confirm="Stichwahl als neue Wahl anlegen?">
-          <input type="hidden" name="csrf_token" value="{{ token }}"><input type="hidden" name="race_id" value="{{ r.race.id }}"><input type="hidden" name="kind" value="deputy">
-          <button class="btn small">Stichwahl anlegen</button></form>{% endif %}</div>
-    {% elif r.deputy_pending %}<p class="muted">Die Stellvertretung ergibt sich aus der Stichwahl.</p>
-    {% endif %}
-    {% if not r.winner and not r.runoff_first %}<p class="muted">Keine gültigen Stimmen.</p>{% endif %}
+    {% if runoff_yes and r.plan_kind == 'deputy' and r.deputy %}<p>🥈 Stellvertreter/in: <strong>{{ cand(r.deputy, True) }}</strong></p>{% endif %}
+    {% if not r.winner and not r.runoff_first and not runoff_yes %}<p class="muted">Keine gültigen Stimmen.</p>{% endif %}
   </div>
   <table class="bars">
     {% for row in r.rows %}
