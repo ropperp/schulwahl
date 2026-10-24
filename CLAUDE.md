@@ -62,6 +62,7 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 ## Benutzer, Rollen, Sitzungen
 - Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). **Ersteinrichtung:** keine Benutzer → `/admin` leitet auf `/admin/setup` (Einrichtungscode aus DB/Log/`manage setup-code` + Admin-Passwort + Schulname + QR-Adresse); danach ist die Seite gesperrt. `ADMIN_PASSWORD` ist nur optional (Tests, automatische Installation).
 - **Jede neue Route unter `/admin` braucht `require_staff`/`require_admin` bzw. `staff_form`/`admin_form`.** `tests/test_security.py` prüft automatisch alle Routen (Login, CSRF, Rollen) und schlägt sonst fehl.
+- Zweiter Administrator über Benutzer → Rolle; nie sich selbst/letzten Admin löschen.
 - Nur Admin: Einstellungen (inkl. QR-Adresse `public_url`), Benutzer, Protokoll, Wahl löschen. Wahlleiter: alles andere.
 - Verwaltungsaktionen mit `audit(db, request, "aktion", "detail")` protokollieren (wird mit dem nächsten `commit` gespeichert).
 - QR-Adresse: `settings.public_url(request)` (DB-Einstellung > `PUBLIC_URL` > aktuelle Adresse); nicht per Parameter überschreibbar.

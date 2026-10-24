@@ -82,7 +82,7 @@ Die **Wahlleitung entscheidet** pro Wahlgang Ja/Nein (`Race.runoff_decision`); e
 * **Rollen:** `admin` (alles) und `wahlleiter` (Wahlen durchführen). Jede Seite unter `/admin` muss in der Funktionsdefinition eine der Abhängigkeiten
   `require_staff` / `require_admin` bzw. bei Formularen `staff_form` / `admin_form` verwenden. `tests/test_security.py` prüft das **automatisch für jede Route** und
   schlägt fehl, wenn man es vergisst.
-* **Passwort vergessen:** `docker compose exec app python -m app.manage reset-password admin`.
+* **Passwort vergessen:** Ein anderer Administrator setzt es unter „Benutzer“ zurück, sonst `docker compose exec app python -m app.manage reset-password admin`. Mehrere Administratoren sind möglich (Benutzer anlegen → Rolle).
 
 ## 6. Anleitungen für typische Änderungen
 

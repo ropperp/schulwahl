@@ -14,11 +14,17 @@
 </section>
 {% endif %}
 <section class="card">
-  <h2>Wahlleiter/in anlegen</h2>
-  <p class="muted small">Wahlleiter/innen führen Wahlen durch (Kandidat/innen, Codes, Start/Ende, Auswertung). Einstellungen, Benutzer, Protokoll und das Löschen von Wahlen bleiben Administrator/innen vorbehalten.</p>
+  <h2>Benutzer anlegen</h2>
+  <p class="muted small"><strong>Wahlleiter/innen</strong> führen Wahlen durch (Kandidat/innen, Codes, Start/Ende, Auswertung).
+    <strong>Administrator/innen</strong> dürfen zusätzlich Einstellungen ändern, Benutzer verwalten, das Protokoll sehen und Wahlen löschen –
+    ein zweiter Administrator ist sinnvoll, falls der erste verhindert oder sein Passwort verloren ist.</p>
   <form method="post" action="/admin/users" class="row gap wrap">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <input name="username" placeholder="Benutzername, z. B. mueller" aria-label="Benutzername" maxlength="30" autocapitalize="none" required>
+    <select name="role" aria-label="Rolle">
+      <option value="wahlleiter">Wahlleiter/in</option>
+      <option value="admin">Administrator/in</option>
+    </select>
     <button class="btn primary">Anlegen (Passwort wird erzeugt)</button>
   </form>
 </section>
@@ -31,16 +37,16 @@
       <td><strong>{{ u.username }}</strong>{% if u.must_change %} <span class="muted small">(muss Passwort ändern)</span>{% endif %}</td>
       <td>{{ ROLE_LABEL[u.role] }}</td>
       <td class="num">
-        {% if u.role == 'wahlleiter' %}
+        {% if u.id != user.id %}
         <form method="post" action="/admin/users/{{ u.id }}/reset" class="inline" data-confirm="Passwort von {{ u.username }} zurücksetzen? Die Person wird abgemeldet.">
           <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn">Passwort zurücksetzen</button></form>
         <form method="post" action="/admin/users/{{ u.id }}/delete" class="inline" data-confirm="Benutzer {{ u.username }} löschen?">
           <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="linkbtn danger">Löschen</button></form>
-        {% elif u.id == user.id %}<a href="/admin/account">Passwort ändern</a>{% endif %}
+        {% else %}<a href="/admin/account">Passwort ändern</a>{% endif %}
       </td>
     </tr>
     {% endfor %}
   </table>
-  <p class="muted small">Hast du dein eigenes Administrator-Passwort vergessen? Dann hilft der Server-Zugang: <code>docker compose exec app python -m app.manage reset-password admin</code></p>
+  <p class="muted small">Hast du dein eigenes Administrator-Passwort vergessen? Dann kann ein anderer Administrator es hier zurücksetzen, sonst hilft der Server-Zugang: <code>docker compose exec app python -m app.manage reset-password admin</code></p>
 </section>
 {% endblock %}

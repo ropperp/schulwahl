@@ -47,7 +47,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
         audit(db, request, "login")
         db.commit()
         return go("/admin")
-    if user is None:
+    if user is None:  # gleiche Rechenzeit wie bei vorhandenem Benutzer (verrät nicht, ob es ihn gibt)
         burn_password_time(password)
     login_limiter.fail(ip)
     user_limiter.fail(name)

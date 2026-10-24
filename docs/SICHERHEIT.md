@@ -36,6 +36,7 @@ Die Tests laufen bei jedem Commit automatisch (GitHub Actions, `.github/workflow
 | CSRF | Token in jedem POST (Test prüft **alle** POST-Routen automatisch) |
 | Protokoll | Anmeldungen, Passwortänderungen, Codes, Start/Ende, Löschungen – mit Benutzer und IP (nur Administratoren sehen es) |
 | Notfallzugang | Nur über den Server: `python -m app.manage reset-password` |
+| Zweiter Administrator | Im Backoffice unter „Benutzer“ anlegbar; ein Administrator kann andere zurücksetzen/löschen, aber nie sich selbst; der letzte sichtbare Administrator bleibt erhalten |
 | Ersteinrichtung | Es steht kein Passwort in einer Datei. Eine frische Installation erzeugt einen **Einrichtungscode** (8 Zeichen, nur auf dem Server sichtbar); ohne ihn kann niemand den Administrator anlegen. Falsche Codes werden gesperrt (5 Versuche/5 min pro IP) und protokolliert; nach der Einrichtung ist die Seite gesperrt (Tests: `test_setup.py`) |
 
 ## Schutz gegen typische Angriffe – was getestet wurde
