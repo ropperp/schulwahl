@@ -214,3 +214,13 @@ def test_codes_form_opens_pdf_in_new_tab_and_reloads_page(client, election):
     assert 'href="/admin/elections/' not in html or 'target="_blank"' in html
     js = client.get("/static/app.js").text
     assert "data-reload-after" in js and "location.reload" in js
+
+
+def test_header_is_single_row_with_menu_instead_of_inline_links(client):
+    html = client.get("/").text
+    head = html.split("</header>")[0]
+    assert 'class="burger"' in head and "Vergangene Wahlen" in head            # Menü mit drei Strichen
+    assert head.count('<a href="/vergangene">') == 1 and 'class="usermenu"' in head
+    css = client.get("/static/style.css").text
+    assert ".brand.has-logo span { display: none; }" in css                       # auf dem Handy nur Logo, kein Zeilenumbruch
+    assert "input[type=datetime-local]" in css and "min-width: 0" in css           # Datumsfelder bleiben in der Karte

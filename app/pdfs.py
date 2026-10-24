@@ -44,6 +44,15 @@ def _fit(text: str, font: str, size: float, max_width: float) -> str:
     return text + "…"
 
 
+def _fit_size(text: str, font: str, size: float, max_width: float, min_size: float) -> tuple[str, float]:
+    """Verkleinert die Schrift bis min_size, bevor der Text mit … gekürzt wird."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    while size > min_size and stringWidth(text, font, size) > max_width:
+        size = max(min_size, round(size - 0.25, 2))
+    return _fit(text, font, size, max_width), size
+
+
 def _qr(c: canvas.Canvas, url: str, x: float, y: float, size: float) -> None:
     widget = qr.QrCodeWidget(url, barLevel="M")
     x0, y0, x1, y1 = widget.getBounds()
@@ -80,10 +89,12 @@ def codes_pdf(election_name: str, items: list[tuple[str, str]], base_url: str) -
 
         text_w = w - qr_size - 3 * pad
         c.setFillColor(colors.black)
-        c.setFont("Helvetica", 7)
-        c.drawString(x + pad, y + h - pad - 6, _fit(election_name, "Helvetica", 7, w - 2 * pad))
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(x + pad, y + h - pad - 18, _fit(dept, "Helvetica-Bold", 9, text_w))
+        title, title_size = _fit_size(election_name, "Helvetica", 7, w - 2 * pad, 5.5)
+        c.setFont("Helvetica", title_size)
+        c.drawString(x + pad, y + h - pad - 6, title)
+        label, label_size = _fit_size(dept, "Helvetica-Bold", 11.5, text_w, 7)  # Abteilung gut lesbar, schrumpft nur bei langen Namen
+        c.setFont("Helvetica-Bold", label_size)
+        c.drawString(x + pad, y + h - pad - 6 - label_size - 3, label)
         c.setFont("Courier-Bold", 17)
         c.drawString(x + pad, y + h / 2 - 12, f"{code[:3]} {code[3:]}")
         c.setFont("Helvetica", 6.5)

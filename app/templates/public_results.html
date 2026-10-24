@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% from "_results.html" import results_block, participation_block %}
 {% block title %}Ergebnis{% endblock %}
-{% block nav %}<a href="/">Zur Wahl</a> <a href="/vergangene">Vergangene Wahlen</a>{% endblock %}
 {% block content %}
 <div class="hero"><h1>Ergebnis</h1><p>{{ e.name }}</p></div>
 {{ participation_block(part) }}

@@ -16,6 +16,28 @@ ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
 
+# Der Wahlname steht auf jedem Code-Zettel (3 Zettel pro Zeile): länger wäre dort nicht mehr lesbar
+ELECTION_NAME_MAX = 40
+
+
+def name_problem(name: str) -> str | None:
+    if len(name) > ELECTION_NAME_MAX:
+        return (f"Der Name ist zu lang ({len(name)} Zeichen, höchstens {ELECTION_NAME_MAX}). "
+                "Er wird auf die Code-Zettel gedruckt und muss dort Platz haben.")
+    return None
+
+
+def short_name(*parts: str) -> str:
+    """Setzt einen Wahlnamen aus Teilen zusammen und lässt hinten weg, was nicht mehr in die Begrenzung passt."""
+    name = ""
+    for part in parts:
+        candidate = f"{name} {part}".strip() if part else name
+        if len(candidate) > ELECTION_NAME_MAX:
+            break
+        name = candidate
+    return name or parts[0][:ELECTION_NAME_MAX].rstrip()
+
+
 class VoteError(Exception):
     def __init__(self, message: str, kind: str = "invalid"):
         super().__init__(message)

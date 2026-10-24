@@ -1,23 +1,21 @@
 {% extends "base.html" %}
 {% block home %}/admin{% endblock %}
-{% block nav %}
+{% block menu %}
   {% if user %}
+  <div class="who"><strong>{{ user.username }}</strong><small>{{ ROLE_LABEL[user.role] }}</small></div>
   <a href="/admin">Wahlen</a>
-  <details class="usermenu">
-    <summary aria-label="Benutzermenü"><span class="ava"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4.4 0-8 2.2-8 5v3h16v-3c0-2.8-3.6-5-8-5z"/></svg></span><span>{{ user.username }}</span></summary>
-    <div class="menu">
-      <div class="who"><strong>{{ user.username }}</strong><small>{{ ROLE_LABEL[user.role] }}</small></div>
-      <a href="/admin/account">Mein Konto</a>
-      {% if user.role == 'admin' %}
-      <a href="/admin/settings">Einstellungen</a>
-      <a href="/admin/users">Benutzer</a>
-      <a href="/admin/audit">Protokoll</a>
-      {% endif %}
-      <form method="post" action="/admin/logout">
-        <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-        <button class="out" type="submit">Abmelden</button>
-      </form>
-    </div>
-  </details>
+  <a href="/admin/account">Mein Konto</a>
+  {% if user.role == 'admin' %}
+  <a href="/admin/settings">Einstellungen</a>
+  <a href="/admin/users">Benutzer</a>
+  <a href="/admin/audit">Protokoll</a>
+  {% endif %}
+  <a href="/">Zur Wahlseite</a>
+  <form method="post" action="/admin/logout">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <button class="out" type="submit">Abmelden</button>
+  </form>
+  {% else %}
+  <a href="/">Zur Wahl</a>
   {% endif %}
 {% endblock %}
