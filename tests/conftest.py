@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.models import Base, Candidate, Code, Department, Election, Race  # noqa: E402
-from app.security import code_limiter, login_limiter  # noqa: E402
+from app.security import code_limiter, login_limiter, user_limiter  # noqa: E402
 from app.services import generate_codes  # noqa: E402
 from app.timeutil import utcnow  # noqa: E402
 
@@ -28,6 +28,7 @@ def clean_db():
     Base.metadata.create_all(engine)
     code_limiter.reset()
     login_limiter.reset()
+    user_limiter.reset()
     from app import settings
     settings.invalidate()
     yield
@@ -82,14 +83,31 @@ def ballot_choices(election, db, code, school=0, dept=0):
     return data
 
 
-def admin_login(client):
+def admin_login(client, username="admin", password="geheim-test"):
     page = client.get("/admin/login")
     token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
-    r = client.post("/admin/login", data={"password": "geheim-test", "csrf_token": token})
+    r = client.post("/admin/login", data={"username": username, "password": password, "csrf_token": token})
     assert r.status_code == 303
     return csrf(client)
 
 
+def make_user(db, username="leiter", password="wahlleiter-passwort", role="wahlleiter", must_change=False):
+    from app.models import User
+    from app.security import hash_password
+    u = User(username=username, role=role, password_hash=hash_password(password), must_change=must_change)
+    db.add(u)
+    db.commit()
+    return u
+
+
+def vote_count(db):
+    """Alle abgegebenen Stimmen: in der Urne wartende plus bereits ausgezählte."""
+    from sqlalchemy import func, select
+    from app.models import PendingBallot, Vote
+    return (db.scalar(select(func.count()).select_from(Vote)) or 0) + \
+           (db.scalar(select(func.count()).select_from(PendingBallot)) or 0)
+
+
 def csrf(client):
-    page = client.get("/admin")
+    page = client.get("/admin/account")  # erreichbar für jede angemeldete Person, auch vor dem ersten Passwortwechsel
     return re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)

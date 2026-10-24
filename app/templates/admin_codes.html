@@ -8,14 +8,15 @@
   <h2>Codes erzeugen</h2>
   <form method="post" action="/admin/elections/{{ e.id }}/codes">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
-    <div class="{{ 'grid4' if e.code_mode == 'class' else 'grid3' }}">
+    <div class="{{ 'grid3' if e.code_mode == 'class' else 'grid2' }}">
       <div><label for="department_id">Abteilung</label>
         <select id="department_id" name="department_id">{% for d in e.departments %}<option value="{{ d.id }}">{{ d.name }}</option>{% endfor %}</select></div>
       {% if e.code_mode == 'class' %}<div><label for="group_name">Klasse</label><input id="group_name" name="group_name" placeholder="z. B. 5AHD" maxlength="100" required></div>{% endif %}
       <div><label for="count">Anzahl</label><input id="count" name="count" type="number" min="1" max="2000" value="200" required></div>
-      <div><label for="base_url">Adresse im QR-Code</label><input id="base_url" name="base_url" value="{{ default_base }}" required></div>
     </div>
-    <p class="muted small">Die Adresse muss genau die sein, unter der die Handys den Server erreichen (z. B. http://192.168.1.50:8080). Danach öffnet sich ein druckfertiges PDF (24 Zettel pro A4-Seite).</p>
+    <p class="muted small">Adresse im QR-Code: <strong>{{ qr_url }}</strong>
+      {% if is_admin %}· <a href="/admin/settings">ändern</a>{% else %}· (kann nur ein Administrator ändern){% endif %}.
+      Sie muss genau die sein, unter der die Schüler/innen die Wahl erreichen. Danach öffnet sich ein druckfertiges PDF (24 Zettel pro A4-Seite).</p>
     <button class="btn primary">Codes erzeugen &amp; PDF öffnen</button>
   </form>
 </section>
@@ -27,13 +28,13 @@
     <tr><th>{{ 'Abteilung / Klasse' if e.code_mode == 'class' else 'Abteilung' }}</th><th class="num">Erzeugt</th><th class="num">Verwendet</th><th class="num">Offen</th><th></th></tr>
     {% for d in part.departments %}
     <tr><td><strong>{{ d.name }}</strong></td><td class="num">{{ d.total }}</td><td class="num">{{ d.used }}</td><td class="num">{{ d.total - d.used }}</td>
-      <td class="num">{% if d.total - d.used > 0 %}<a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;unused=1&amp;base_url={{ default_base|urlencode }}" target="_blank">Offene als PDF</a>{% endif %}
+      <td class="num">{% if d.total - d.used > 0 %}<a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;unused=1" target="_blank">Offene als PDF</a>{% endif %}
         {% if status != 'ended' and d.total - d.used > 0 %}
         <form method="post" action="/admin/elections/{{ e.id }}/codes/delete-unused" class="inline" data-confirm="Alle offenen Codes von {{ d.name }} löschen? Bereits verwendete bleiben.">
           <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input type="hidden" name="department_id" value="{{ d.id }}"><button class="linkbtn danger">Offene löschen</button></form>{% endif %}</td></tr>
     {% for g in d.groups %}
     <tr><td>&nbsp;&nbsp;↳ {{ g.name }}</td><td class="num">{{ g.total }}</td><td class="num">{{ g.used }}</td><td class="num">{{ g.total - g.used }}</td>
-      <td class="num">{% if g.total - g.used > 0 %}<a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;group_name={{ g.name|urlencode }}&amp;unused=1&amp;base_url={{ default_base|urlencode }}" target="_blank">Offene als PDF</a>{% endif %}
+      <td class="num">{% if g.total - g.used > 0 %}<a href="/admin/elections/{{ e.id }}/codes.pdf?department_id={{ d.id }}&amp;group_name={{ g.name|urlencode }}&amp;unused=1" target="_blank">Offene als PDF</a>{% endif %}
         {% if status != 'ended' and g.total - g.used > 0 %}
         <form method="post" action="/admin/elections/{{ e.id }}/codes/delete-unused" class="inline" data-confirm="Alle offenen Codes der Klasse {{ g.name }} löschen?">
           <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input type="hidden" name="department_id" value="{{ d.id }}"><input type="hidden" name="group_name" value="{{ g.name }}"><button class="linkbtn danger">Offene löschen</button></form>{% endif %}</td></tr>

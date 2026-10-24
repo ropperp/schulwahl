@@ -1,13 +1,14 @@
 """Fachlogik: Codes, Wahlstatus, Stimmabgabe, Auswertung."""
+import random
 import re
 import secrets
 import uuid
 from datetime import datetime
 
-from sqlalchemy import case, delete, func, select, update
+from sqlalchemy import case, delete, func, select, text, update
 from sqlalchemy.orm import Session, selectinload
 
-from .models import Candidate, Code, Department, Election, Image, Race, Vote
+from .models import Candidate, Code, Department, Election, Image, PendingBallot, Race, Vote
 from .timeutil import fmt_local, utcnow
 
 # Ohne leicht verwechselbare Zeichen (kein I, O, 0, 1): 32 Zeichen ^ 6 Stellen = ~1 Mrd. Kombinationen
@@ -92,6 +93,12 @@ def ballot_for(db: Session, code: Code) -> tuple[Election, list[Race]]:
             .order_by(Race.position, Race.id)
         )
     )
+    # Zufällige Reihenfolge pro Stimmzettel, damit niemand durch seine Listenposition bevorzugt wird.
+    # Bewusst nur ein Attribut am Objekt: die gespeicherte Reihenfolge der Kandidaten bleibt unverändert.
+    for race in races:
+        shuffled = list(race.candidates)
+        random.SystemRandom().shuffle(shuffled)
+        race.ballot_candidates = shuffled
     return election, races
 
 
@@ -128,13 +135,54 @@ def cast_vote(db: Session, raw_code: str, form) -> None:
         if result.rowcount != 1:
             db.rollback()
             raise VoteError("Dieser Code wurde bereits verwendet.", "used")
-        db.add_all(Vote(id=uuid.uuid4().hex, race_id=rid, candidate_id=cid) for rid, cid in choices.items())
+        # Die Stimmen kommen zunächst in die "Urne" (pending_ballots) und werden erst nach Wahlende gemischt
+        # nach votes übernommen (siehe flush_ballots). So verrät die interne Transaktions-ID keine Zuordnung.
+        db.add_all(PendingBallot(id=uuid.uuid4().hex, race_id=rid, candidate_id=cid) for rid, cid in choices.items())
         db.commit()
     except VoteError:
         raise
     except Exception:
         db.rollback()
         raise
+
+
+def flush_ballots(db: Session, election: Election) -> int:
+    """Übernimmt nach Wahlende alle Stimmen aus der Urne in `votes` - in einer Transaktion und in zufälliger Reihenfolge.
+
+    Dadurch haben alle Stimmen dieselbe Transaktions-ID und keine erkennbare Reihenfolge; sie lassen sich weder
+    einem Code noch einander (z. B. Schulsprecher- und Abteilungsstimme derselben Person) zuordnen.
+    Mehrfach und gleichzeitig aufrufbar: jede Stimme wird genau einmal verschoben.
+    """
+    if election_status(election) != "ended":
+        return 0
+    race_ids = select(Race.id).where(Race.election_id == election.id)
+    if db.scalar(select(PendingBallot.id).where(PendingBallot.race_id.in_(race_ids)).limit(1)) is None:
+        db.rollback()  # nichts zu tun (häufigster Fall bei Ansichten der Ergebnisse): keine Schreibzugriffe
+        return 0
+    rows = db.execute(
+        delete(PendingBallot).where(PendingBallot.race_id.in_(race_ids))
+        .returning(PendingBallot.race_id, PendingBallot.candidate_id)
+    ).all()
+    random.SystemRandom().shuffle(rows)
+    db.add_all(Vote(id=uuid.uuid4().hex, race_id=rid, candidate_id=cid) for rid, cid in rows)
+    db.commit()
+    if rows:
+        _wipe_empty_urn(db)
+    return len(rows)
+
+
+def _wipe_empty_urn(db: Session) -> None:
+    """PostgreSQL: Ist die Urne leer, TRUNCATE statt gelöschter Zeilen, damit keine Reste auf der Platte bleiben."""
+    if db.get_bind().dialect.name != "postgresql":
+        return
+    try:
+        db.execute(text("SET LOCAL lock_timeout = '2s'"))
+        db.execute(text("LOCK TABLE pending_ballots IN ACCESS EXCLUSIVE MODE"))
+        if db.scalar(select(PendingBallot.id).limit(1)) is None:
+            db.execute(text("TRUNCATE pending_ballots"))
+        db.commit()
+    except Exception:  # noqa: BLE001 - reine Aufräumhilfe, darf die Auswertung nie verhindern
+        db.rollback()
 
 
 # ---------------------------------------------------------------- Auswertung
@@ -207,6 +255,7 @@ def decide(rows: list[dict], runoff_kind: str = "") -> dict:
 
 
 def compute_results(db: Session, election: Election) -> list[dict]:
+    flush_ballots(db, election)
     races = list(
         db.scalars(
             select(Race)
@@ -257,6 +306,7 @@ def delete_election(db: Session, election: Election) -> None:
     race_ids = select(Race.id).where(Race.election_id == election.id)
     image_ids = list(db.scalars(select(Candidate.image_id).where(Candidate.race_id.in_(race_ids),
                                                                    Candidate.image_id.is_not(None))))
+    db.execute(delete(PendingBallot).where(PendingBallot.race_id.in_(race_ids)))
     db.execute(delete(Vote).where(Vote.race_id.in_(race_ids)))
     db.execute(delete(Candidate).where(Candidate.race_id.in_(race_ids)))
     if image_ids:

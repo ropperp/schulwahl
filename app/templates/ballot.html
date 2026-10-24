@@ -12,7 +12,7 @@
     <fieldset class="race">
       <legend>{{ race.title }}</legend>
       <p class="muted small">Du hast eine Stimme.</p>
-      {% for c in race.candidates %}
+      {% for c in race.ballot_candidates %}
       <label class="choice">
         <input type="radio" name="race_{{ race.id }}" value="{{ c.id }}" required {{ 'checked' if prefill.get('race_' ~ race.id) == c.id|string }}>
         {% if c.image_id %}<img class="avatar" src="/media/candidate/{{ c.id }}" alt="">{% else %}<span class="avatar ph">{{ c.name[:1] }}</span>{% endif %}

@@ -9,14 +9,12 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from . import config
 from .db import get_db
 from . import images
 from . import settings as app_settings
 from .models import Candidate, Code, Department, Election, Image, Race
 from .pdfs import codes_pdf, protocol_pdf
-from .security import (admin_form, check_admin_password, client_ip, csrf_token, login_limiter,
-                       require_admin, verify_csrf)
+from .security import admin_form, audit, require_admin, require_staff, staff_form
 from .services import (STATUS_LABEL, compute_results, delete_election, election_status, generate_codes,
                        participation)
 from .timeutil import parse_local, utcnow
@@ -39,49 +37,16 @@ def get_election(db: Session, election_id: int) -> Election:
     return e
 
 
-# ------------------------------------------------------------ Login
-
-@router.get("/login")
-def login_page(request: Request):
-    if request.session.get("admin"):
-        return go("/admin")
-    return render(request, "admin_login.html", error=None, disabled=not config.ADMIN_PASSWORD)
-
-
-@router.post("/login")
-async def login(request: Request):
-    form = await request.form()
-    verify_csrf(request, form)
-    ip = client_ip(request)
-    wait = login_limiter.retry_after(ip)
-    if wait:
-        return render(request, "admin_login.html", 429, error=f"Zu viele Versuche. Bitte {wait} Sekunden warten.",
-                      disabled=False)
-    if check_admin_password(str(form.get("password", ""))):
-        request.session.clear()
-        request.session["admin"] = True
-        csrf_token(request)
-        return go("/admin")
-    login_limiter.fail(ip)
-    return render(request, "admin_login.html", 401, error="Falsches Passwort.", disabled=not config.ADMIN_PASSWORD)
-
-
-@router.post("/logout")
-def logout(request: Request, form=Depends(admin_form)):
-    request.session.clear()
-    return go("/admin/login")
-
-
 # ------------------------------------------------------------ Übersicht / Anlegen
 
 @router.get("")
-def overview(request: Request, db: Session = Depends(get_db), _=Depends(require_admin)):
+def overview(request: Request, db: Session = Depends(get_db), _=Depends(require_staff)):
     elections = db.scalars(select(Election).order_by(Election.start_at.desc())).all()
     return render(request, "admin_elections.html", elections=elections)
 
 
 @router.get("/elections/new")
-def new_form(request: Request, _=Depends(require_admin)):
+def new_form(request: Request, _=Depends(require_staff)):
     from .timeutil import input_local
     start = utcnow().replace(second=0, microsecond=0) + timedelta(days=1)
     return render(request, "admin_new.html", start=input_local(start),
@@ -89,7 +54,7 @@ def new_form(request: Request, _=Depends(require_admin)):
 
 
 @router.post("/elections")
-def create(request: Request, form=Depends(admin_form), db: Session = Depends(get_db)):
+def create(request: Request, form=Depends(staff_form), db: Session = Depends(get_db)):
     name = str(form.get("name", "")).strip()
     dept_names = [d.strip() for d in str(form.get("departments", "")).splitlines() if d.strip()]
     try:
@@ -116,6 +81,7 @@ def create(request: Request, form=Depends(admin_form), db: Session = Depends(get
     e.departments = [Department(name=n) for n in dept_names]
     db.add(e)
     db.flush()
+    audit(db, request, "election_created", name)
     if form.get("standard_races"):
         e.races.append(Race(title="Schulsprecher/in", position=0))
         for i, d in enumerate(e.departments, start=1):
@@ -128,7 +94,7 @@ def create(request: Request, form=Depends(admin_form), db: Session = Depends(get
 # ------------------------------------------------------------ Detailseite
 
 @router.get("/elections/{election_id}")
-def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     races = db.scalars(
         select(Race).where(Race.election_id == e.id).options(selectinload(Race.candidates))
@@ -144,7 +110,7 @@ def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=
 
 
 @router.post("/elections/{election_id}/settings")
-def settings(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def settings(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) == "ended":
         flash(request, "Eine beendete Wahl kann nicht mehr geändert werden.", "error")
@@ -161,40 +127,44 @@ def settings(request: Request, election_id: int, form=Depends(admin_form), db: S
         flash(request, "Das Ende liegt in der Vergangenheit. Zum Beenden den Button „Jetzt beenden“ nutzen.", "error")
     else:
         e.name, e.start_at, e.end_at = name, start, end
+        audit(db, request, "election_changed", name)
         db.commit()
         flash(request, "Gespeichert.")
     return go(f"/admin/elections/{e.id}")
 
 
 @router.post("/elections/{election_id}/start-now")
-def start_now(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def start_now(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) == "planned":
         e.start_at = utcnow()
         if e.end_at <= e.start_at:
             e.end_at = e.start_at + timedelta(hours=8)
+        audit(db, request, "election_started", e.name)
         db.commit()
         flash(request, "Wahl gestartet.")
     return go(f"/admin/elections/{e.id}")
 
 
 @router.post("/elections/{election_id}/close")
-def close(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def close(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         e.closed_at = utcnow()
+        audit(db, request, "election_closed", e.name)
         db.commit()
         flash(request, "Wahl beendet. Es werden keine Stimmen mehr angenommen.")
     return go(f"/admin/elections/{e.id}/dashboard")
 
 
 @router.post("/elections/{election_id}/publish")
-def publish(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def publish(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         flash(request, "Das Ergebnis kann erst nach Ende der Wahl veröffentlicht werden.", "error")
     else:
         e.results_public = not e.results_public
+        audit(db, request, "results_published" if e.results_public else "results_unpublished", e.name)
         db.commit()
         flash(request, "Ergebnis veröffentlicht." if e.results_public else "Veröffentlichung zurückgenommen.")
     return go(f"/admin/elections/{e.id}/dashboard")
@@ -203,6 +173,7 @@ def publish(request: Request, election_id: int, form=Depends(admin_form), db: Se
 @router.post("/elections/{election_id}/delete")
 def delete(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
+    audit(db, request, "election_deleted", e.name)
     delete_election(db, e)
     flash(request, "Wahl gelöscht.")
     return go("/admin")
@@ -244,7 +215,7 @@ def _drop_image(db: Session, image_id: int | None) -> None:
 
 
 @router.get("/elections/{election_id}/candidates")
-def candidates_page(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def candidates_page(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     races = db.scalars(
         select(Race).where(Race.election_id == e.id)
@@ -255,7 +226,7 @@ def candidates_page(request: Request, election_id: int, db: Session = Depends(ge
 
 
 @router.post("/elections/{election_id}/races")
-def add_race(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def add_race(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     title = str(form.get("title", "")).strip()
     dept_raw = str(form.get("department_id", ""))
@@ -269,7 +240,7 @@ def add_race(request: Request, election_id: int, form=Depends(admin_form), db: S
 
 
 @router.post("/races/{race_id}/rename")
-def rename_race(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def rename_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     title = str(form.get("title", "")).strip()
@@ -280,7 +251,7 @@ def rename_race(request: Request, race_id: int, form=Depends(admin_form), db: Se
 
 
 @router.post("/races/{race_id}/move")
-def move_race(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def move_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     if not _structure_locked(request, e):
@@ -296,7 +267,7 @@ def move_race(request: Request, race_id: int, form=Depends(admin_form), db: Sess
 
 
 @router.post("/races/{race_id}/delete")
-def delete_race(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def delete_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     if not _structure_locked(request, e):
@@ -310,7 +281,7 @@ def delete_race(request: Request, race_id: int, form=Depends(admin_form), db: Se
 
 
 @router.post("/races/{race_id}/candidates")
-def add_candidate(request: Request, race_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def add_candidate(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     race = db.get(Race, race_id) or _404()
     e = get_election(db, race.election_id)
     name = str(form.get("name", "")).strip()
@@ -331,7 +302,7 @@ def add_candidate(request: Request, race_id: int, form=Depends(admin_form), db: 
 
 
 @router.post("/candidates/{candidate_id}/edit")
-def edit_candidate(request: Request, candidate_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def edit_candidate(request: Request, candidate_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     cand = db.get(Candidate, candidate_id) or _404()
     e = get_election(db, db.get(Race, cand.race_id).election_id)
     if _structure_locked(request, e):
@@ -354,7 +325,7 @@ def edit_candidate(request: Request, candidate_id: int, form=Depends(admin_form)
 
 
 @router.post("/candidates/{candidate_id}/delete")
-def delete_candidate(request: Request, candidate_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def delete_candidate(request: Request, candidate_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     cand = db.get(Candidate, candidate_id) or _404()
     e = get_election(db, db.get(Race, cand.race_id).election_id)
     if not _structure_locked(request, e):
@@ -370,11 +341,12 @@ def _404():
     raise HTTPException(404, "Nicht gefunden")
 
 
-# ------------------------------------------------------------ Einstellungen (Schulname, Logo)
+# ------------------------------------------------------------ Einstellungen (nur Admin)
 
 @router.get("/settings")
 def settings_page(request: Request, _=Depends(require_admin)):
-    return render(request, "admin_settings.html", cfg=app_settings.get(), tab=None)
+    return render(request, "admin_settings.html", cfg=app_settings.get(), tab=None, error=None,
+                  qr_url=app_settings.public_url(request))
 
 
 @router.post("/settings")
@@ -383,6 +355,12 @@ def settings_save(request: Request, form=Depends(admin_form), db: Session = Depe
     if not name:
         flash(request, "Bitte einen Schulnamen angeben.", "error")
         return go("/admin/settings")
+    url, problem = None, None
+    if form.get("public_url") is not None:
+        url, problem = app_settings.clean_public_url(str(form.get("public_url")))
+    if problem:
+        flash(request, problem, "error")
+        return go("/admin/settings")
     logo = None
     try:
         raw = images.read_upload(form.get("logo"))
@@ -390,8 +368,12 @@ def settings_save(request: Request, form=Depends(admin_form), db: Session = Depe
     except images.ImageError as err:
         flash(request, str(err), "error")
         return go("/admin/settings")
-    app_settings.save(db, name, logo, remove_logo=bool(form.get("remove_logo")))
-    flash(request, "Einstellungen gespeichert.")
+    changed_url = url is not None and url != app_settings.get()["public_url"]
+    app_settings.save(db, name, logo, remove_logo=bool(form.get("remove_logo")), public_url=url)
+    audit(db, request, "settings_changed", f"QR-Adresse: {url}" if changed_url else "")
+    db.commit()
+    flash(request, "Einstellungen gespeichert." + (
+        " Bereits gedruckte Zettel behalten die alte Adresse im QR-Code." if changed_url else ""))
     return go("/admin/settings")
 
 
@@ -400,7 +382,7 @@ def settings_save(request: Request, form=Depends(admin_form), db: Session = Depe
 @router.get("/elections/{election_id}/codes")
 def codes_page(request: Request, election_id: int, department_id: int | None = None, group_name: str = "",
                state: str = "all",
-               db: Session = Depends(get_db), _=Depends(require_admin)):
+               db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if department_id:
@@ -415,11 +397,11 @@ def codes_page(request: Request, election_id: int, department_id: int | None = N
     codes.sort(key=lambda c: (c.department.name, c.group_name, c.code))
     return render(request, "admin_codes.html", e=e, status=election_status(e), part=participation(db, e),
                   codes=codes, department_id=department_id, group_name=group_name, state=state, tab="codes",
-                  default_base=config.PUBLIC_URL or str(request.base_url).rstrip("/"))
+                  qr_url=app_settings.public_url(request), is_admin=request.state.user.role == "admin")
 
 
 @router.post("/elections/{election_id}/codes/delete-unused")
-def delete_unused_codes(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def delete_unused_codes(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     """Löscht alle noch nicht verwendeten Codes einer Abteilung (und optional einer Klasse)."""
     e = get_election(db, election_id)
     if election_status(e) == "ended":
@@ -433,13 +415,14 @@ def delete_unused_codes(request: Request, election_id: int, form=Depends(admin_f
     if group:
         q = q.where(Code.group_name == group)
     n = db.execute(q).rowcount
+    audit(db, request, "codes_deleted", f"{e.name}: {n} offene Codes")
     db.commit()
     flash(request, f"{n} offene Codes gelöscht. Bereits verwendete Codes bleiben bestehen.")
     return go(f"/admin/elections/{e.id}/codes")
 
 
 @router.post("/codes/{code_id}/delete")
-def delete_code(request: Request, code_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def delete_code(request: Request, code_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     code = db.get(Code, code_id) or _404()
     e = get_election(db, code.election_id)
     if code.used:
@@ -448,13 +431,14 @@ def delete_code(request: Request, code_id: int, form=Depends(admin_form), db: Se
         flash(request, "Die Wahl ist beendet.", "error")
     else:
         db.delete(code)
+        audit(db, request, "code_deleted", e.name)
         db.commit()
         flash(request, "Code gelöscht (er ist nun ungültig).")
     return go(f"/admin/elections/{e.id}/codes")
 
 
 @router.post("/elections/{election_id}/codes")
-def make_codes(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def make_codes(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     e = get_election(db, election_id)
     if election_status(e) == "ended":
         flash(request, "Die Wahl ist beendet, es können keine Codes mehr erzeugt werden.", "error")
@@ -472,16 +456,16 @@ def make_codes(request: Request, election_id: int, form=Depends(admin_form), db:
         flash(request, "Bitte die Klasse angeben (z. B. 5AHD).", "error")
         return go(f"/admin/elections/{e.id}/codes")
     batch = generate_codes(db, e, dept, count, group)
-    base = str(form.get("base_url", "")).strip().rstrip("/")
+    audit(db, request, "codes_created", f"{e.name}: {count} für {dept.name}{' · ' + group if group else ''}")
+    db.commit()
     flash(request, f"{count} Codes für {dept.name}{' · ' + group if group else ''} erzeugt. Das PDF wird geöffnet.")
-    from urllib.parse import quote
-    return go(f"/admin/elections/{e.id}/codes.pdf?batch={batch}&base_url={quote(base, safe='')}")
+    return go(f"/admin/elections/{e.id}/codes.pdf?batch={batch}")
 
 
 @router.get("/elections/{election_id}/codes.pdf")
 def codes_download(election_id: int, request: Request, batch: str = "", department_id: int | None = None,
-                   group_name: str = "", unused: int = 1, base_url: str = "", db: Session = Depends(get_db),
-                   _=Depends(require_admin)):
+                   group_name: str = "", unused: int = 1, db: Session = Depends(get_db),
+                   _=Depends(require_staff)):
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if batch:
@@ -494,7 +478,9 @@ def codes_download(election_id: int, request: Request, batch: str = "", departme
         q = q.where(Code.used.is_(False))
     codes = db.scalars(q).all()
     codes.sort(key=lambda c: (c.department.name, c.group_name, c.code))
-    base = (base_url or config.PUBLIC_URL or str(request.base_url)).rstrip("/")
+    base = app_settings.public_url(request)
+    audit(db, request, "codes_pdf", e.name)
+    db.commit()
     pdf = codes_pdf(e.name, [(c.department.name + (f" · {c.group_name}" if c.group_name else ""), c.code)
                              for c in codes], base)
     return Response(pdf, media_type="application/pdf",
@@ -505,7 +491,7 @@ def codes_download(election_id: int, request: Request, batch: str = "", departme
 # ------------------------------------------------------------ Stichwahl
 
 @router.post("/elections/{election_id}/runoff")
-def create_runoff(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+def create_runoff(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     """Legt bei Stimmengleichheit eine Stichwahl als neue (geplante) Wahl an."""
     e = get_election(db, election_id)
     if election_status(e) != "ended":
@@ -535,6 +521,7 @@ def create_runoff(request: Request, election_id: int, form=Depends(admin_form), 
             src = db.get(Image, c.image_id)
             copy.image_id = _store_image(db, (src.data, src.content_type))
         db.add(copy)
+    audit(db, request, "runoff_created", new.name)
     db.commit()
     flash(request, "Stichwahl angelegt. Als Nächstes Zeitfenster prüfen und neue Codes erzeugen.")
     return go(f"/admin/elections/{new.id}")
@@ -543,7 +530,7 @@ def create_runoff(request: Request, election_id: int, form=Depends(admin_form), 
 # ------------------------------------------------------------ Dashboard & Exporte
 
 @router.get("/elections/{election_id}/dashboard")
-def dashboard(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def dashboard(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     status = election_status(e)
     results = compute_results(db, e) if status == "ended" else None
@@ -557,8 +544,15 @@ def _ended_or_redirect(request, e):
     return None
 
 
+def _csv_safe(value):
+    """Verhindert Formel-Einschleusung in Excel/LibreOffice (Zellen, die mit = + - @ beginnen)."""
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
 @router.get("/elections/{election_id}/results.csv")
-def results_csv(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def results_csv(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:
@@ -568,15 +562,15 @@ def results_csv(request: Request, election_id: int, db: Session = Depends(get_db
     w.writerow(["Wahlgang", "Abteilung", "Kandidat/in", "Stimmen"])
     for r in compute_results(db, e):
         for row in r["rows"]:
-            w.writerow([r["race"].title, r["department"] or "alle", row["candidate"].name, row["votes"]])
-        w.writerow([r["race"].title, r["department"] or "alle", "Ungültig", r["invalid"]])
+            w.writerow([_csv_safe(x) for x in (r["race"].title, r["department"] or "alle", row["candidate"].name, row["votes"])])
+        w.writerow([_csv_safe(r["race"].title), r["department"] or "alle", "Ungültig", r["invalid"]])
     # utf-8-sig, damit Excel Umlaute richtig anzeigt
     return Response(out.getvalue().encode("utf-8-sig"), media_type="text/csv",
                     headers={"Content-Disposition": f'attachment; filename="ergebnis-{e.id}.csv"'})
 
 
 @router.get("/elections/{election_id}/protocol.pdf")
-def protocol(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def protocol(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:

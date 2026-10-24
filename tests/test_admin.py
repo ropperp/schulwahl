@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from app.models import Candidate, Code, Election
 from app.timeutil import input_local, utcnow
-from tests.conftest import admin_login, ballot_choices, csrf, make_codes
+from tests.conftest import admin_login, ballot_choices, csrf, make_codes, vote_count
 
 
 def test_admin_requires_login(client, election):
@@ -20,8 +20,8 @@ def test_wrong_password_and_lockout(client):
     page = client.get("/admin/login")
     token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
     for _ in range(5):
-        assert client.post("/admin/login", data={"password": "falsch", "csrf_token": token}).status_code == 401
-    r = client.post("/admin/login", data={"password": "geheim-test", "csrf_token": token})
+        assert client.post("/admin/login", data={"username": "admin", "password": "falsch", "csrf_token": token}).status_code == 401
+    r = client.post("/admin/login", data={"username": "admin", "password": "geheim-test", "csrf_token": token})
     assert r.status_code == 429  # auch das richtige Passwort wird nun gesperrt
 
 
@@ -127,7 +127,7 @@ def test_delete_election_removes_everything(client, db, election):
     from app.models import Vote
     assert db.scalar(select(func.count()).select_from(Election)) == 0
     assert db.scalar(select(func.count()).select_from(Code)) == 0
-    assert db.scalar(select(func.count()).select_from(Vote)) == 0
+    assert vote_count(db) == 0
 
 
 def test_security_headers_and_health(client):

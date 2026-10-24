@@ -103,6 +103,50 @@ class Vote(Base):
     # candidate_id = NULL bedeutet: ungültige Stimme
 
 
+class PendingBallot(Base):
+    """Zwischenspeicher der Urne: Stimmen warten hier bis zum Ende der Wahl und werden dann gemischt nach `votes` verschoben.
+
+    WAHLGEHEIMNIS: PostgreSQL speichert in jeder Zeile die ID der schreibenden Transaktion (xmin). Würden die Stimmen
+    direkt mit dem Verbrauch des Codes geschrieben, ließe sich per SQL jede Stimme ihrem Code zuordnen. Deshalb gilt:
+    `votes` wird ausschließlich von `flush_ballots` in EINER Transaktion und in zufälliger Reihenfolge befüllt.
+    """
+
+    __tablename__ = "pending_ballots"
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    race_id: Mapped[int] = mapped_column(ForeignKey("races.id"), index=True)
+    candidate_id: Mapped[int | None] = mapped_column(ForeignKey("candidates.id"), default=None)
+
+
+class User(Base):
+    """Backoffice-Zugang. Rollen: `admin` (alles) und `wahlleiter` (Wahlen durchführen)."""
+
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String(50), unique=True)
+    role: Mapped[str] = mapped_column(String(20), default="wahlleiter")
+    password_hash: Mapped[str] = mapped_column(String(300))
+    # Nach einem Zurücksetzen durch den Admin muss die Person beim nächsten Login ein eigenes Passwort wählen.
+    must_change: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Wird bei jeder Passwortänderung erhöht und macht alle bestehenden Sitzungen ungültig.
+    session_version: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AuditLog(Base):
+    """Wer hat wann was im Backoffice getan (nur Verwaltungsaktionen, nie Wahlinhalte)."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    username: Mapped[str] = mapped_column(String(50), default="")
+    ip: Mapped[str] = mapped_column(String(64), default="")
+    action: Mapped[str] = mapped_column(String(60))
+    detail: Mapped[str] = mapped_column(String(300), default="")
+
+
 class Image(Base):
     """Hochgeladene, bereits verkleinerte Bilder (Kandidatenfotos, Schullogo)."""
 

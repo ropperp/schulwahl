@@ -3,9 +3,10 @@ import threading
 from sqlalchemy import func, select
 
 from app.models import Code, Vote
+from app.services import flush_ballots
 from app.timeutil import utcnow
 from datetime import timedelta
-from tests.conftest import ballot_choices, make_codes
+from tests.conftest import ballot_choices, make_codes, vote_count
 
 
 def test_voting_flow_and_counts(client, db, election):
@@ -24,24 +25,27 @@ def test_voting_flow_and_counts(client, db, election):
     data = ballot_choices(election, db, codes[0], school=0, dept=1)
     r = client.post("/vote/review", data=data)
     assert r.status_code == 200 and "Anna" in r.text and "David" in r.text
-    assert db.scalar(select(func.count()).select_from(Vote)) == 0  # Review speichert nichts
+    assert vote_count(db) == 0  # Review speichert nichts
 
     r = client.post("/vote/submit", data=data)
     assert r.status_code == 200 and "Danke" in r.text
-    assert db.scalar(select(func.count()).select_from(Vote)) == 2
+    assert vote_count(db) == 2
 
     # Code ist verbraucht
     r = client.post("/vote/start", data={"code": codes[0]})
     assert r.status_code == 400 and "bereits verwendet" in r.text
     r = client.post("/vote/submit", data=data)
     assert r.status_code == 400
-    assert db.scalar(select(func.count()).select_from(Vote)) == 2
+    assert vote_count(db) == 2
 
 
 def test_invalid_vote_is_stored_as_null_candidate(client, db, election):
     code = make_codes(db, election, 0, 1)[0]
     data = ballot_choices(election, db, code, school="invalid", dept=0)
     assert client.post("/vote/submit", data=data).status_code == 200
+    election.closed_at = utcnow()
+    db.commit()
+    assert flush_ballots(db, election) == 2
     votes = db.scalars(select(Vote)).all()
     assert sorted(v.candidate_id is None for v in votes) == [False, True]
 
@@ -52,7 +56,7 @@ def test_missing_choice_does_not_consume_code(client, db, election):
     data.pop([k for k in data if k.startswith("race_")][0])
     r = client.post("/vote/submit", data=data)
     assert r.status_code == 400 and "Auswahl" in r.text
-    assert db.scalar(select(func.count()).select_from(Vote)) == 0
+    assert vote_count(db) == 0
     assert db.scalar(select(Code.used).where(Code.code == code)) is False
 
 
@@ -63,7 +67,7 @@ def test_candidate_of_other_department_is_rejected(client, db, election):
     key = [k for k in data if k.startswith("race_")][1]
     data[key] = str(eva.id)
     assert client.post("/vote/submit", data=data).status_code == 400
-    assert db.scalar(select(func.count()).select_from(Vote)) == 0
+    assert vote_count(db) == 0
 
 
 def test_unknown_code_and_rate_limit(client, db, election):
@@ -106,7 +110,7 @@ def test_concurrent_double_submit_counts_once(client, db, election):
     [t.start() for t in threads]
     [t.join() for t in threads]
     assert results.count(200) == 1
-    assert db.scalar(select(func.count()).select_from(Vote)) == 2
+    assert vote_count(db) == 2
 
 
 def test_votes_are_not_linked_to_codes():

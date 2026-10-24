@@ -24,6 +24,7 @@ def _database_url():
 
 
 DATABASE_URL = _database_url()
+# Nur das Startpasswort des Benutzers "admin" beim allerersten Start. Danach verwaltet die App die Passwörter selbst.
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 PUBLIC_URL = os.getenv("PUBLIC_URL", "").rstrip("/")
@@ -33,8 +34,16 @@ TRUST_PROXY = os.getenv("TRUST_PROXY", "0") == "1"
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
 
 # Schutz gegen Code-Raten: max. Fehlversuche pro IP im Zeitfenster.
-# Großzügig, weil hinter dem Schul-WLAN oft alle Handys dieselbe IP haben.
-CODE_MAX_FAILS = int(os.getenv("CODE_MAX_FAILS", "30"))
+# Großzügig, weil hinter dem Schul-WLAN oft alle Handys dieselbe IP haben (Tippfehler von ~1000 Schülern!).
+# Bei 32^6 möglichen Codes bleibt Raten damit aussichtslos.
+CODE_MAX_FAILS = int(os.getenv("CODE_MAX_FAILS", "300"))
 CODE_WINDOW_SECONDS = int(os.getenv("CODE_WINDOW_SECONDS", "300"))
 LOGIN_MAX_FAILS = int(os.getenv("LOGIN_MAX_FAILS", "5"))
 LOGIN_WINDOW_SECONDS = int(os.getenv("LOGIN_WINDOW_SECONDS", "300"))
+# Zusätzlich zur Sperre pro IP: Fehlversuche pro Benutzername (verteilte Angriffe auf ein Konto)
+LOGIN_USER_MAX_FAILS = int(os.getenv("LOGIN_USER_MAX_FAILS", "20"))
+LOGIN_USER_WINDOW_SECONDS = int(os.getenv("LOGIN_USER_WINDOW_SECONDS", "600"))
+
+# Größenlimits für Anfragen (Schutz vor Speicher-Flut): Schülerseiten sehr klein, Backoffice wegen Bild-Upload größer
+MAX_BODY_PUBLIC = 32 * 1024
+MAX_BODY_ADMIN = 8 * 1024 * 1024
