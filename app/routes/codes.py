@@ -22,6 +22,7 @@ router = APIRouter(prefix="/admin")
 def codes_page(request: Request, election_id: int, department_id: int | None = None, group_name: str = "",
                state: str = "all",
                db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Reiter „Codes“: Codes erzeugen, Übersicht je Abteilung/Klasse, filterbare Code-Liste."""
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if department_id:
@@ -62,6 +63,7 @@ def delete_unused_codes(request: Request, election_id: int, form=Depends(staff_f
 
 @router.post("/codes/{code_id}/delete")
 def delete_code(request: Request, code_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Löscht einen noch nicht verwendeten Code (er wird ungültig). Verwendete Codes bleiben immer bestehen."""
     code = db.get(Code, code_id) or not_found()
     e = get_election(db, code.election_id)
     if code.used:
@@ -78,6 +80,7 @@ def delete_code(request: Request, code_id: int, form=Depends(staff_form), db: Se
 
 @router.post("/elections/{election_id}/codes")
 def make_codes(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Erzeugt neue Codes für eine Abteilung (und Klasse) und leitet auf das druckfertige PDF weiter."""
     e = get_election(db, election_id)
     if election_status(e) == "ended":
         flash(request, "Die Wahl ist beendet, es können keine Codes mehr erzeugt werden.", "error")
@@ -105,6 +108,7 @@ def make_codes(request: Request, election_id: int, form=Depends(staff_form), db:
 def codes_download(election_id: int, request: Request, batch: str = "", department_id: int | None = None,
                    group_name: str = "", unused: int = 1, db: Session = Depends(get_db),
                    _=Depends(require_staff)):
+    """Code-Zettel als PDF (24 pro A4-Seite, schwarz-weiß); die Adresse im QR-Code kommt immer aus den Einstellungen."""
     e = get_election(db, election_id)
     q = select(Code).where(Code.election_id == e.id).options(selectinload(Code.department))
     if batch:

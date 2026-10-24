@@ -15,12 +15,14 @@ router = APIRouter(prefix="/admin")
 
 @router.get("/settings")
 def settings_page(request: Request, _=Depends(require_admin)):
+    """Einstellungen: Schulname, Logo, Adresse im QR-Code (nur Administrator)."""
     return render(request, "admin_settings.html", cfg=app_settings.get(), tab=None, error=None,
                   qr_url=app_settings.public_url(request))
 
 
 @router.post("/settings")
 def settings_save(request: Request, form=Depends(admin_form), db: Session = Depends(get_db)):
+    """Speichert die Einstellungen (Adresse und Logo werden streng geprüft) und protokolliert die Änderung."""
     name = str(form.get("school_name", "")).strip()[:100]
     if not name:
         flash(request, "Bitte einen Schulnamen angeben.", "error")

@@ -28,6 +28,7 @@ class ImportProblem(Exception):
 
 @dataclass
 class ParsedCandidate:
+    """Ein geprüfter Kandidat aus der Importdatei (Foto ist bereits kontrolliert und neu kodiert)."""
     name: str
     info: str = ""
     photo: tuple[bytes, str] | None = None  # bereits geprüft und neu kodiert
@@ -35,6 +36,7 @@ class ParsedCandidate:
 
 @dataclass
 class ParsedRace:
+    """Ein geprüfter Wahlgang aus der Importdatei mit seinen Kandidat/innen."""
     title: str
     department: str | None
     candidates: list[ParsedCandidate] = field(default_factory=list)
@@ -42,11 +44,13 @@ class ParsedRace:
 
 @dataclass
 class Parsed:
+    """Ergebnis von `parse`: alle Wahlgänge plus Anzahl der verworfenen Fotos."""
     races: list[ParsedRace]
     photo_problems: int = 0
 
 
 def export_election(db: Session, election: Election) -> bytes:
+    """Erzeugt die Export-Datei (JSON, UTF-8) mit allen Wahlgängen, Kandidat/innen und Fotos einer Wahl."""
     races = []
     for race in sorted(election.races, key=lambda r: (r.position, r.id)):
         cands = []
@@ -64,6 +68,7 @@ def export_election(db: Session, election: Election) -> bytes:
 
 
 def _text(value, limit: int, what: str, required: bool = False) -> str:
+    """Prüft ein Textfeld der Importdatei: Typ, Steuerzeichen entfernen, kürzen; mit `required` darf es nicht leer sein."""
     if value is None and not required:
         return ""
     if not isinstance(value, str):
@@ -166,6 +171,7 @@ def apply(db: Session, election: Election, parsed: Parsed) -> dict:
 
 
 def summary(stats: dict) -> str:
+    """Fasst das Ergebnis eines Imports in einem deutschen Satz für die Erfolgsmeldung zusammen."""
     text = f"{stats['candidates']} Kandidat/innen importiert ({stats['races']} neue Wahlgänge"
     if stats["departments"]:
         text += f", {stats['departments']} neue Abteilungen"

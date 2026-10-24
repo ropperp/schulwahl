@@ -25,12 +25,14 @@ router = APIRouter(prefix="/admin")
 
 @router.get("")
 def overview(request: Request, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Startseite des Backoffice: alle Wahlen, neueste zuerst."""
     elections = db.scalars(select(Election).order_by(Election.start_at.desc())).all()
     return render(request, "admin_elections.html", elections=elections)
 
 
 @router.get("/elections/new")
 def new_form(request: Request, _=Depends(require_staff)):
+    """Formular „Neue Wahl“ (Zeiten sind mit morgen 8 Stunden vorbelegt)."""
     from ..timeutil import input_local
     start = utcnow().replace(second=0, microsecond=0) + timedelta(days=1)
     return render(request, "admin_new.html", start=input_local(start),
@@ -39,6 +41,7 @@ def new_form(request: Request, _=Depends(require_staff)):
 
 @router.post("/elections")
 def create(request: Request, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Legt eine Wahl an (Name höchstens 40 Zeichen), optional mit Standard-Wahlgängen und Kandidaten aus einer Export-Datei."""
     name = str(form.get("name", "")).strip()
     dept_names = [d.strip() for d in str(form.get("departments", "")).splitlines() if d.strip()]
     try:
@@ -90,6 +93,7 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
 
 @router.get("/elections/{election_id}")
 def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Übersicht einer Wahl: Checkliste, Start/Ende steuern, Name und Zeitfenster."""
     e = get_election(db, election_id)
     races = db.scalars(
         select(Race).where(Race.election_id == e.id).options(selectinload(Race.candidates))
@@ -106,6 +110,7 @@ def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=
 
 @router.post("/elections/{election_id}/settings")
 def settings(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Ändert Name und Zeitfenster einer noch nicht beendeten Wahl."""
     e = get_election(db, election_id)
     if election_status(e) == "ended":
         flash(request, "Eine beendete Wahl kann nicht mehr geändert werden.", "error")
@@ -133,6 +138,7 @@ def settings(request: Request, election_id: int, form=Depends(staff_form), db: S
 
 @router.post("/elections/{election_id}/start-now")
 def start_now(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Startet eine geplante Wahl sofort."""
     e = get_election(db, election_id)
     if election_status(e) == "planned":
         e.start_at = utcnow()
@@ -146,6 +152,7 @@ def start_now(request: Request, election_id: int, form=Depends(staff_form), db: 
 
 @router.post("/elections/{election_id}/close")
 def close(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Beendet die Wahl vorzeitig; danach werden keine Stimmen mehr angenommen (nicht rückgängig zu machen)."""
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         e.closed_at = utcnow()
@@ -157,6 +164,7 @@ def close(request: Request, election_id: int, form=Depends(staff_form), db: Sess
 
 @router.post("/elections/{election_id}/publish")
 def publish(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Veröffentlicht das Ergebnis (nur wenn jeder Wahlgang zur Stichwahl entschieden ist) oder nimmt es zurück."""
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         flash(request, "Das Ergebnis kann erst nach Ende der Wahl veröffentlicht werden.", "error")
@@ -174,6 +182,7 @@ def publish(request: Request, election_id: int, form=Depends(staff_form), db: Se
 
 @router.post("/elections/{election_id}/delete")
 def delete(request: Request, election_id: int, form=Depends(admin_form), db: Session = Depends(get_db)):
+    """Löscht eine Wahl samt Codes und Stimmen endgültig (nur Administrator)."""
     e = get_election(db, election_id)
     audit(db, request, "election_deleted", e.name)
     delete_election(db, e)
@@ -285,6 +294,7 @@ def create_runoff_all(request: Request, election_id: int, form=Depends(staff_for
 
 @router.get("/elections/{election_id}/dashboard")
 def dashboard(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Beteiligung live; nach Wahlende Ergebnisse, Empfehlung und Entscheidung zur Stichwahl."""
     e = get_election(db, election_id)
     status = election_status(e)
     results = compute_results(db, e) if status == "ended" else None
@@ -295,6 +305,7 @@ def dashboard(request: Request, election_id: int, db: Session = Depends(get_db),
 
 
 def _ended_or_redirect(request, e):
+    """Ergebnisse gibt es erst nach Wahlende: sonst Hinweis und Weiterleitung zum Dashboard."""
     if election_status(e) != "ended":
         flash(request, "Ergebnisse gibt es erst nach Ende der Wahl.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
@@ -310,6 +321,7 @@ def _csv_safe(value):
 
 @router.get("/elections/{election_id}/results.csv")
 def results_csv(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Ergebnis als CSV (Excel-tauglich, Formelzeichen entschärft); erst nach Wahlende."""
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:
@@ -328,6 +340,7 @@ def results_csv(request: Request, election_id: int, db: Session = Depends(get_db
 
 @router.get("/elections/{election_id}/protocol.pdf")
 def protocol(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Wahlprotokoll als PDF mit Logo und Unterschriftenzeilen; erst nach Wahlende."""
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:

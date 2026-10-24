@@ -10,7 +10,7 @@ import sys
 
 from sqlalchemy import select
 
-from .accounts import set_password
+from .accounts import ensure_setup_code, format_setup_code, set_password
 from .db import SessionLocal, init_db
 from .models import User
 from .security import (ROLE_ADMIN, ROLE_WAHLLEITER, hash_password, normalize_username, random_password,
@@ -18,9 +18,11 @@ from .security import (ROLE_ADMIN, ROLE_WAHLLEITER, hash_password, normalize_use
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Einstiegspunkt der Kommandozeile (siehe Modul-Text); gibt 0 bei Erfolg zurück, sonst einen Fehlercode."""
     parser = argparse.ArgumentParser(prog="app.manage", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list-users", help="Alle Benutzer anzeigen")
+    sub.add_parser("setup-code", help="Einrichtungscode der Ersteinrichtung anzeigen (nur solange es noch keinen Benutzer gibt)")
     reset = sub.add_parser("reset-password", help="Neues Zufallspasswort setzen (muss beim nächsten Login geändert werden)")
     reset.add_argument("username")
     create = sub.add_parser("create-user", help="Benutzer mit Zufallspasswort anlegen")
@@ -29,6 +31,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     init_db()
+    if args.cmd == "setup-code":
+        code = ensure_setup_code()
+        if code is None:
+            print("Die Ersteinrichtung ist abgeschlossen, es gibt keinen Einrichtungscode mehr.")
+            return 1
+        print(f"Einrichtungscode: {format_setup_code(code)}")
+        return 0
     with SessionLocal() as db:
         if args.cmd == "list-users":
             for u in db.scalars(select(User).order_by(User.username)):

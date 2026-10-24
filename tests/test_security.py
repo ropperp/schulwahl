@@ -29,7 +29,7 @@ def admin_routes():
     return routes
 
 
-PUBLIC_ADMIN_PATHS = {"/admin/login"}
+PUBLIC_ADMIN_PATHS = {"/admin/login", "/admin/setup"}  # Ersteinrichtung: geschützt durch den Einrichtungscode (tests/test_setup.py)
 
 
 def _fill(path):

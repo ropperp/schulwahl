@@ -1,3 +1,8 @@
+"""Einstiegspunkt der Web-Anwendung: baut die App zusammen (Middleware, Fehlerseiten, Routen) und startet die Datenbank.
+
+Reihenfolge der Middleware (von außen nach innen): Sicherheits-Header -> Größenlimit -> Sitzung -> Routen.
+Die eigentlichen Seiten stehen in app/routes/, die Fachlogik in services.py.
+"""
 import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -9,7 +14,7 @@ from sqlalchemy.exc import DataError
 from starlette.middleware.sessions import SessionMiddleware
 
 from . import config
-from .accounts import bootstrap_admin
+from .accounts import bootstrap_admin, ensure_setup_code, format_setup_code
 from .db import init_db
 from .routes import auth, candidates, codes, elections, public, settings as settings_routes, users, vote
 from .security import LoginRequired, PasswordChangeRequired
@@ -22,14 +27,17 @@ mimetypes.add_type("font/woff2", ".woff2")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Beim Start: Tabellen anlegen, Admin aus ADMIN_PASSWORD anlegen oder (frische Installation) den Einrichtungscode erzeugen und ins Log schreiben."""
     init_db()
-    if bootstrap_admin() == "missing":
-        print("WARNUNG: Es gibt noch keinen Benutzer und ADMIN_PASSWORD ist nicht gesetzt - das Backoffice ist gesperrt. "
-              "Passwort setzen mit: docker compose exec app python -m app.manage reset-password admin")
+    if bootstrap_admin() == "missing":  # frische Installation: Ersteinrichtung über /admin
+        code = ensure_setup_code()
+        print(f"ERSTEINRICHTUNG: Bitte /admin im Browser öffnen. EINRICHTUNGSCODE: {format_setup_code(code)} "
+              "(erneut anzeigen: docker compose exec app python -m app.manage setup-code)", flush=True)
     yield
 
 
 class BodyTooLarge(Exception):
+    """Interner Abbruch, wenn eine Anfrage das erlaubte Größenlimit überschreitet."""
     pass
 
 
@@ -133,16 +141,19 @@ app.add_middleware(SecurityHeaders)
 
 @app.exception_handler(LoginRequired)
 async def login_required_handler(request: Request, exc: LoginRequired):
+    """Nicht angemeldet: Weiterleitung zur Anmeldeseite."""
     return RedirectResponse("/admin/login", status_code=303)
 
 
 @app.exception_handler(PasswordChangeRequired)
 async def password_change_handler(request: Request, exc: PasswordChangeRequired):
+    """Einmal-Passwort noch nicht geändert: Weiterleitung zur Seite „Mein Konto“."""
     return RedirectResponse("/admin/account", status_code=303)
 
 
 @app.exception_handler(HTTPException)
 async def http_error(request: Request, exc: HTTPException):
+    """Fehlerseite für Browser (HTML), JSON für alles andere; keine technischen Details nach außen."""
     if "text/html" in request.headers.get("accept", ""):
         return render(request, "error.html", exc.status_code, message=exc.detail)
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
@@ -157,11 +168,13 @@ async def bad_input(request: Request, exc: Exception):
 
 @app.get("/health")
 def health():
+    """Lebenszeichen für Docker/Proxy (keine Datenbank-Abfrage, damit er immer schnell antwortet)."""
     return {"status": "ok"}
 
 
 @app.get("/robots.txt", include_in_schema=False)
 def robots():
+    """Suchmaschinen sollen die Wahlseite nicht indexieren."""
     return PlainTextResponse("User-agent: *\nDisallow: /\n")
 
 

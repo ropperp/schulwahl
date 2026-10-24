@@ -286,12 +286,3 @@ def test_cli_reset_password(client, db, capsys):
     assert manage.main(["create-user", "zweiter", "--role", "admin"]) == 0
     assert manage.main(["create-user", "zweiter"]) == 1
     assert manage.main(["list-users"]) == 0
-
-
-def test_bootstrap_without_password_leaves_backoffice_locked(client, db, monkeypatch):
-    from app import accounts, config
-    db.query(User).delete()
-    db.commit()
-    monkeypatch.setattr(config, "ADMIN_PASSWORD", "")
-    assert accounts.bootstrap_admin() == "missing"
-    assert "Es gibt noch keinen Benutzer" in client.get("/admin/login").text

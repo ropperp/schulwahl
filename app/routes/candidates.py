@@ -29,6 +29,7 @@ def _photo(request: Request, form) -> tuple[bytes, str] | None:
 
 @router.get("/elections/{election_id}/candidates")
 def candidates_page(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Reiter „Kandidat/innen“: Wahlgänge mit Kandidat/innen, Formulare zum Anlegen/Bearbeiten, Export/Import."""
     e = get_election(db, election_id)
     races = db.scalars(
         select(Race).where(Race.election_id == e.id)
@@ -40,6 +41,7 @@ def candidates_page(request: Request, election_id: int, db: Session = Depends(ge
 
 @router.post("/elections/{election_id}/races")
 def add_race(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Legt einen Wahlgang an (für alle oder eine Abteilung); nur vor Wahlbeginn."""
     e = get_election(db, election_id)
     title = str(form.get("title", "")).strip()
     dept_raw = str(form.get("department_id", ""))
@@ -54,6 +56,7 @@ def add_race(request: Request, election_id: int, form=Depends(staff_form), db: S
 
 @router.post("/races/{race_id}/rename")
 def rename_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Benennt einen Wahlgang um; nur vor Wahlbeginn."""
     race = db.get(Race, race_id) or not_found()
     e = get_election(db, race.election_id)
     title = str(form.get("title", "")).strip()
@@ -65,6 +68,7 @@ def rename_race(request: Request, race_id: int, form=Depends(staff_form), db: Se
 
 @router.post("/races/{race_id}/move")
 def move_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Verschiebt einen Wahlgang in der Reihenfolge nach oben/unten; nur vor Wahlbeginn."""
     race = db.get(Race, race_id) or not_found()
     e = get_election(db, race.election_id)
     if not structure_locked(request, e):
@@ -81,6 +85,7 @@ def move_race(request: Request, race_id: int, form=Depends(staff_form), db: Sess
 
 @router.post("/races/{race_id}/delete")
 def delete_race(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Löscht einen Wahlgang samt Kandidat/innen und Fotos; nur vor Wahlbeginn."""
     race = db.get(Race, race_id) or not_found()
     e = get_election(db, race.election_id)
     if not structure_locked(request, e):
@@ -95,6 +100,7 @@ def delete_race(request: Request, race_id: int, form=Depends(staff_form), db: Se
 
 @router.post("/races/{race_id}/candidates")
 def add_candidate(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Legt einen Kandidaten an (Name, Klasse, optional Foto); nur vor Wahlbeginn."""
     race = db.get(Race, race_id) or not_found()
     e = get_election(db, race.election_id)
     name = str(form.get("name", "")).strip()
@@ -116,6 +122,7 @@ def add_candidate(request: Request, race_id: int, form=Depends(staff_form), db: 
 
 @router.post("/candidates/{candidate_id}/edit")
 def edit_candidate(request: Request, candidate_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Ändert Name, Klasse und Foto eines Kandidaten; nur vor Wahlbeginn."""
     cand = db.get(Candidate, candidate_id) or not_found()
     e = get_election(db, db.get(Race, cand.race_id).election_id)
     if structure_locked(request, e):
@@ -139,6 +146,7 @@ def edit_candidate(request: Request, candidate_id: int, form=Depends(staff_form)
 
 @router.post("/candidates/{candidate_id}/delete")
 def delete_candidate(request: Request, candidate_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Löscht einen Kandidaten samt Foto; nur vor Wahlbeginn."""
     cand = db.get(Candidate, candidate_id) or not_found()
     e = get_election(db, db.get(Race, cand.race_id).election_id)
     if not structure_locked(request, e):
@@ -152,6 +160,7 @@ def delete_candidate(request: Request, candidate_id: int, form=Depends(staff_for
 
 @router.get("/elections/{election_id}/candidates.json")
 def candidates_export(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Lädt alle Wahlgänge und Kandidat/innen als Datei herunter (zum Sichern oder für eine spätere Wahl)."""
     e = get_election(db, election_id)
     data = candidate_io.export_election(db, e)
     audit(db, request, "candidates_exported", e.name)
@@ -164,6 +173,7 @@ def candidates_export(request: Request, election_id: int, db: Session = Depends(
 
 @router.post("/elections/{election_id}/candidates/import")
 def candidates_import(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Spielt eine Export-Datei in eine noch nicht gestartete Wahl ein (alles oder nichts)."""
     e = get_election(db, election_id)
     if structure_locked(request, e):
         return back_to(e)

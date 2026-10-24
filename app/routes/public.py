@@ -17,6 +17,7 @@ router = APIRouter()
 
 @router.get("/ergebnis/{election_id}")
 def public_results(request: Request, election_id: int, db: Session = Depends(get_db)):
+    """Öffentliche Ergebnisseite; nur für beendete und veröffentlichte Wahlen, sonst 404."""
     e = db.get(Election, election_id)
     if e is None or not e.results_public or election_status(e) != "ended":
         raise HTTPException(404, "Kein veröffentlichtes Ergebnis")
@@ -27,6 +28,7 @@ _IMAGE_HEADERS = {"Cache-Control": "public, max-age=3600", "X-Content-Type-Optio
 
 
 def _image_response(db: Session, image_id: int | None) -> Response:
+    """Liefert ein gespeichertes Bild mit Cache-Hinweis oder 404."""
     img = db.get(Image, image_id) if image_id else None
     if img is None:
         raise HTTPException(404, "Kein Bild")
@@ -42,11 +44,13 @@ _photo_cache: dict[int, tuple[float, bytes, str]] = {}
 
 @router.get("/media/logo")
 def logo(db: Session = Depends(get_db)):
+    """Das Schullogo (aus den Einstellungen)."""
     return _image_response(db, settings.get()["logo_id"])
 
 
 @router.get("/media/candidate/{candidate_id}")
 def candidate_photo(candidate_id: int, db: Session = Depends(get_db)):
+    """Foto eines Kandidaten; kurz im Speicher gehalten, weil jeder Stimmzettel viele Fotos lädt."""
     now = time.monotonic()
     hit = _photo_cache.get(candidate_id)
     if hit and hit[0] > now:
