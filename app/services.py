@@ -254,6 +254,49 @@ def decide(rows: list[dict], runoff_kind: str = "") -> dict:
     return out
 
 
+def runoff_advice(rows: list[dict], decision: dict, valid: int, runoff_kind: str = "") -> dict:
+    """Empfehlung zur Stichwahl (die Wahlleitung entscheidet) und die Kandidat/innen, die in einer Stichwahl antreten würden.
+
+    Empfohlen wird eine Stichwahl bei Stimmengleichheit und bei mehr als zwei Kandidat/innen, wenn niemand mehr als die
+    Hälfte der gültigen Stimmen hat. Bei nur zwei Kandidat/innen bringt eine Stichwahl nichts.
+    """
+    n = len(rows)
+    top = rows[0] if rows else None
+    majority = bool(valid) and top["votes"] * 2 > valid
+    if valid == 0:
+        recommend, reason = False, "Es gibt keine gültigen Stimmen."
+    elif decision["runoff_first"]:
+        recommend, reason = True, "Stimmengleichheit um Platz 1 - ohne Stichwahl gibt es keine Entscheidung."
+    elif runoff_kind == "deputy":
+        recommend, reason = False, "Das war bereits die Stichwahl um die Stellvertretung."
+    elif n <= 2:
+        recommend, reason = False, (f"Nur {n} Kandidat/innen - eine Stichwahl bringt hier nichts "
+                                    f"({top['candidate'].name}: {top['percent']:.1f} % der gültigen Stimmen).")
+    elif majority and decision["runoff_second"]:
+        recommend, reason = True, "Stimmengleichheit um Platz 2 (Stellvertretung)."
+    elif majority:
+        recommend, reason = False, f"{top['candidate'].name} hat die absolute Mehrheit ({top['percent']:.1f} % der gültigen Stimmen)."
+    else:
+        recommend = True
+        reason = (f"{top['candidate'].name} hat nur {top['percent']:.1f} % der gültigen Stimmen - keine absolute Mehrheit "
+                  f"(mehr als 50 %) bei {n} Kandidat/innen.")
+
+    voted = [r for r in rows if r["votes"] > 0]
+    if decision["runoff_first"]:
+        plan_kind, plan = "speaker", list(decision["runoff_first"])
+    elif majority and decision["runoff_second"] and runoff_kind != "deputy":
+        plan_kind, plan = "deputy", list(decision["runoff_second"])
+    elif voted:
+        second_votes = next((r["votes"] for r in voted if r["votes"] < voted[0]["votes"]), None)
+        group = [r["candidate"] for r in voted if second_votes is not None and r["votes"] == second_votes]
+        plan_kind, plan = "speaker", ([voted[0]["candidate"]] + group if group else [])
+    else:
+        plan_kind, plan = "speaker", []
+    if runoff_kind == "deputy" and plan_kind == "speaker":
+        plan_kind = "deputy"
+    return {"recommend": recommend, "reason": reason, "majority": majority, "plan_kind": plan_kind, "plan": plan}
+
+
 def compute_results(db: Session, election: Election) -> list[dict]:
     flush_ballots(db, election)
     races = list(
@@ -286,6 +329,7 @@ def compute_results(db: Session, election: Election) -> list[dict]:
             r["percent"] = round(100 * r["votes"] / valid, 1) if valid else 0.0
         decision = decide(rows, race.runoff_kind)
         expected = part["used"] if race.department_id is None else used_by_dept.get(race.department_id, 0)
+        advice = runoff_advice(rows, decision, valid, race.runoff_kind)
         results.append({
             "race": race,
             "department": race.department.name if race.department else None,
@@ -296,6 +340,8 @@ def compute_results(db: Session, election: Election) -> list[dict]:
             "expected": expected,
             "consistent": valid + invalid == expected,
             "tie": len(decision["leaders"]) > 1,
+            "decision": race.runoff_decision,
+            **advice,
             **decision,
         })
     return results

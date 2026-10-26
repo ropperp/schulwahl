@@ -213,3 +213,6 @@ table.bars tr.sub td { padding-top: 0; font-size: .9rem; color: var(--muted); }
 .mode input { width: auto; margin-top: .3rem; }
 .grid4 { display: grid; grid-template-columns: 1.4fr 1fr 1fr 2fr; gap: 12px; }
 @media (max-width: 600px) { .grid4 { grid-template-columns: 1fr; } }
+
+.decision { border: 1px solid var(--line); border-radius: 10px; padding: .75rem 1rem; margin: .5rem 0 1rem; background: var(--bg); }
+.decision p { margin: .35rem 0; }

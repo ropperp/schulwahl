@@ -16,7 +16,8 @@ datensparsam und mit geschütztem Wahlgeheimnis. Gebaut für eine HTL mit ca. 10
   - **Wahlleiter/in:** Wahlen durchführen – Kandidat/innen (mit Foto), Codes (PDF mit QR), Start/Ende, Dashboard, Ergebnis, Stichwahl.
   - Jede Person ändert ihr Passwort selbst (*Mein Konto*). Einmal-Passwörter erzwingen den Wechsel beim ersten Login.
 - **Dashboard:** Beteiligung live je Abteilung. Ergebnisse inkl. ungültiger Stimmen erst **nach Ende**; Protokoll-PDF, CSV, optional öffentliche Ergebnisseite („Vergangene Wahlen“).
-- **Auswertung:** Platz 1 Sprecher/in, Platz 2 Stellvertreter/in; Stichwahl nur bei Stimmengleichheit (per Klick als neue Wahl).
+- **Auswertung:** Platz 1 Sprecher/in, Platz 2 Stellvertreter/in. Pro Wahlgang gibt das System eine **Stichwahl-Empfehlung** (mehr als 2 Kandidat/innen ohne absolute Mehrheit oder Gleichstand), **die Wahlleitung entscheidet** mit Ja/Nein. Veröffentlicht werden kann erst nach der Entscheidung; danach ist sie gesperrt (bis die Veröffentlichung zurückgenommen wird). „Ja“ legt per Klick die Stichwahl mit den zwei Bestplatzierten an.
+- **Kandidaten-Export/-Import:** Wahlgänge samt Kandidat/innen und Fotos als Datei sichern und in eine neue Wahl wieder einspielen (praktisch für Testläufe und das nächste Jahr).
 - **Wahlgeheimnis:** Stimmen sind nicht mit Codes verknüpft – auch nicht über Datenbank-Interna (Urne, siehe [Sicherheit](docs/SICHERHEIT.md)).
 
 ## Schnellstart

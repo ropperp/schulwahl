@@ -11,7 +11,10 @@
   <h2>{{ it.e.name }}</h2>
   <p class="muted small">{{ it.e.start_at|local }} Uhr</p>
   {% for r in it.results %}
-    {% if r.winner or r.deputy %}
+    {% if r.decision == 'yes' and r.plan %}
+    <h3>{{ r.race.title }}{% if r.department %} <span class="tag">{{ r.department }}</span>{% endif %}</h3>
+    <div class="winnerrow">⚖ <span>Stichwahl: {{ r.plan|map(attribute='name')|join(', ') }}</span></div>
+    {% elif r.winner or r.deputy %}
     <h3>{{ r.race.title }}{% if r.department %} <span class="tag">{{ r.department }}</span>{% endif %}</h3>
     {% if r.winner %}<div class="winnerrow">🏆 <span>{{ cand(r.winner) }}</span></div>{% endif %}
     {% if r.deputy %}<div class="winnerrow">🥈 <span>{{ cand(r.deputy) }} <span class="muted small">(Stellvertretung)</span></span></div>{% endif %}

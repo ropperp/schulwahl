@@ -1,16 +1,17 @@
 """Backoffice: Wahlen anlegen, Codes erzeugen, Dashboard, Exporte."""
 import csv
 import io
+import re
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .db import get_db
-from . import images
+from . import candidate_io, images
 from . import settings as app_settings
 from .models import Candidate, Code, Department, Election, Image, Race
 from .pdfs import codes_pdf, protocol_pdf
@@ -72,6 +73,13 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
         error = "Mindestens eine Abteilung angeben."
     elif len(set(n.lower() for n in dept_names)) != len(dept_names):
         error = "Abteilungsnamen müssen unterschiedlich sein."
+    parsed = None
+    if not error:
+        try:
+            raw = _read_import_file(form.get("import_file"))
+            parsed = candidate_io.parse(raw) if raw else None
+        except candidate_io.ImportProblem as err:
+            error = str(err)
     if error:
         return render(request, "admin_new.html", 400, error=error, start=form.get("start_at", ""),
                       end=form.get("end_at", ""))
@@ -86,8 +94,12 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
         e.races.append(Race(title="Schulsprecher/in", position=0))
         for i, d in enumerate(e.departments, start=1):
             e.races.append(Race(title="Abteilungssprecher/in", department_id=d.id, position=i))
+    if parsed:
+        stats = candidate_io.apply(db, e, parsed)
+        audit(db, request, "candidates_imported", f"{e.name}: {stats['candidates']}")
     db.commit()
-    flash(request, "Wahl angelegt. Als Nächstes die Kandidat/innen eintragen und Codes erzeugen.")
+    flash(request, "Wahl angelegt. " + (candidate_io.summary(stats) + " Als Nächstes die Codes erzeugen." if parsed
+                                        else "Als Nächstes die Kandidat/innen eintragen und Codes erzeugen."))
     return go(f"/admin/elections/{e.id}")
 
 
@@ -162,6 +174,10 @@ def publish(request: Request, election_id: int, form=Depends(staff_form), db: Se
     e = get_election(db, election_id)
     if election_status(e) != "ended":
         flash(request, "Das Ergebnis kann erst nach Ende der Wahl veröffentlicht werden.", "error")
+    elif not e.results_public and db.scalar(
+            select(func.count()).select_from(Race).where(Race.election_id == e.id, Race.runoff_decision == "")):
+        flash(request, "Bitte zuerst bei jedem Wahlgang entscheiden, ob eine Stichwahl durchgeführt wird. "
+                       "Erst danach kann das Ergebnis veröffentlicht werden.", "error")
     else:
         e.results_public = not e.results_public
         audit(db, request, "results_published" if e.results_public else "results_unpublished", e.name)
@@ -341,6 +357,63 @@ def _404():
     raise HTTPException(404, "Nicht gefunden")
 
 
+def _read_import_file(upload) -> bytes | None:
+    if upload is None or not getattr(upload, "filename", ""):
+        return None
+    data = upload.file.read(candidate_io.MAX_FILE_BYTES + 1)
+    if len(data) > candidate_io.MAX_FILE_BYTES:
+        raise candidate_io.ImportProblem("Die Datei ist zu groß (max. 6 MB).")
+    return data or None
+
+
+@router.get("/elections/{election_id}/candidates.json")
+def candidates_export(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    e = get_election(db, election_id)
+    data = candidate_io.export_election(db, e)
+    audit(db, request, "candidates_exported", e.name)
+    db.commit()
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", e.name.encode("ascii", "ignore").decode()).strip("-")[:40] or "wahl"
+    return Response(data, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="kandidaten-{slug}.json"',
+                             "Cache-Control": "no-store"})
+
+
+@router.post("/elections/{election_id}/candidates/import")
+def candidates_import(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    e = get_election(db, election_id)
+    if _structure_locked(request, e):
+        return _back(e)
+    try:
+        parsed = candidate_io.parse(_read_import_file(form.get("import_file")))
+    except candidate_io.ImportProblem as err:
+        flash(request, str(err), "error")
+        return _back(e)
+    stats = candidate_io.apply(db, e, parsed)
+    audit(db, request, "candidates_imported", f"{e.name}: {stats['candidates']}")
+    db.commit()
+    flash(request, candidate_io.summary(stats))
+    return _back(e)
+
+
+@router.post("/races/{race_id}/runoff-decision")
+def runoff_decision(request: Request, race_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Wahlleitung entscheidet pro Wahlgang: Stichwahl ja/nein (oder Entscheidung zurücknehmen). Gesperrt, solange veröffentlicht."""
+    race = db.get(Race, race_id) or _404()
+    e = get_election(db, race.election_id)
+    answer = str(form.get("answer", ""))
+    if answer not in ("yes", "no", ""):
+        raise HTTPException(400, "Ungültige Eingabe")
+    if election_status(e) != "ended":
+        flash(request, "Über eine Stichwahl kann erst nach Ende der Wahl entschieden werden.", "error")
+    elif e.results_public:
+        flash(request, "Das Ergebnis ist veröffentlicht. Zum Ändern zuerst die Veröffentlichung zurücknehmen.", "error")
+    else:
+        race.runoff_decision = answer
+        audit(db, request, "runoff_decision", f"{e.name} / {race.title}: {answer or 'zurückgenommen'}")
+        db.commit()
+    return go(f"/admin/elections/{e.id}/dashboard#race-{race.id}")
+
+
 # ------------------------------------------------------------ Einstellungen (nur Admin)
 
 @router.get("/settings")
@@ -497,11 +570,13 @@ def create_runoff(request: Request, election_id: int, form=Depends(staff_form), 
     if election_status(e) != "ended":
         flash(request, "Eine Stichwahl kann erst nach Ende der Wahl angelegt werden.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
-    kind = "deputy" if form.get("kind") == "deputy" else "speaker"
     result = next((r for r in compute_results(db, e) if str(r["race"].id) == str(form.get("race_id"))), None)
-    tied = (result or {}).get("runoff_second" if kind == "deputy" else "runoff_first") or []
+    if result is None or result["decision"] != "yes":
+        flash(request, "Bitte zuerst bei diesem Wahlgang entscheiden: „Stichwahl durchführen“.", "error")
+        return go(f"/admin/elections/{e.id}/dashboard")
+    kind, tied = result["plan_kind"], result["plan"]
     if not tied:
-        flash(request, "Für diesen Wahlgang ist keine Stichwahl nötig.", "error")
+        flash(request, "Für diesen Wahlgang gibt es keine zwei Kandidat/innen mit Stimmen - keine Stichwahl möglich.", "error")
         return go(f"/admin/elections/{e.id}/dashboard")
     race = result["race"]
     suffix = f" – {race.department.name}" if race.department else ""
