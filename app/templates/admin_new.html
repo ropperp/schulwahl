@@ -18,7 +18,11 @@
     <textarea id="departments" name="departments" rows="4" required>Elektrotechnik
 Mechatronik
 Maschinenbau</textarea>
-    <label>Wie sollen die Codes verteilt werden?</label>
+    <label class="check"><input type="checkbox" name="source" value="manual">
+      Ergebnisse einer bereits (analog) durchgeführten Wahl nachtragen – ohne Stimmcodes</label>
+    <p class="muted small">Start und Ende dürfen dann in der Vergangenheit liegen. Es werden keine Codes erzeugt; die Endergebnisse trägst du
+      danach im Reiter „Ergebnisse eintragen“ direkt ein. Die Wahl erscheint anschließend unter „Vergangene Wahlen“.</p>
+    <label>Wie sollen die Codes verteilt werden? (ohne Bedeutung, wenn Ergebnisse nachgetragen werden)</label>
     <label class="mode"><input type="radio" name="code_mode" value="department" checked>
       <span><strong>Pro Abteilung</strong> (empfohlen)<br><span class="muted small">Codes gehören nur zu einer Abteilung, z. B. 250 für Elektrotechnik. Es ist nicht erkennbar, aus welcher Klasse eine Stimme kommt – datensparsam.</span></span></label>
     <label class="mode"><input type="radio" name="code_mode" value="class">

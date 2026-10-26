@@ -28,6 +28,8 @@ class Election(Base):
     results_public: Mapped[bool] = mapped_column(Boolean, default=False)
     # "department": Codes pro Abteilung (datensparsam). "class": Codes pro Klasse (Beteiligung je Klasse sichtbar)
     code_mode: Mapped[str] = mapped_column(String(20), default="department", server_default="department")
+    # "live": normale Wahl mit Codes. "manual": bereits analog durchgeführte Wahl, Ergebnisse werden nachgetragen (keine Codes)
+    source: Mapped[str] = mapped_column(String(10), default="live", server_default="live")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     departments: Mapped[list["Department"]] = relationship(

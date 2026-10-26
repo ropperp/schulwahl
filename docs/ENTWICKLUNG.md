@@ -74,6 +74,17 @@ Folge: `votes` darf **ausschließlich** in `flush_ballots` befüllt werden. (Tes
 Die **Wahlleitung entscheidet** pro Wahlgang Ja/Nein (`Race.runoff_decision`); erst wenn alle entschieden sind, lässt sich veröffentlichen, danach ist die Entscheidung gesperrt.
 „Stichwahl anlegen“ erzeugt eine neue Wahl mit den besten zwei (`routes/elections.py: _build_runoff`), „alle gemeinsam“ fasst mehrere Wahlgänge in eine Wahl.
 
+### Bereits analog durchgeführte Wahlen nachtragen
+
+Für eine Wahl, die schon ohne das System stattgefunden hat (z. B. die erste Runde vor einer jetzt folgenden digitalen Stichwahl),
+gibt es `Election.source = "manual"` statt `"live"`: beim Anlegen (`/admin/elections/new`, Haken „Ergebnisse nachtragen“) dürfen
+Start/Ende in der Vergangenheit liegen, es werden keine Codes erzeugt. `structure_locked()` lässt solche Wahlen trotz sofortigem
+`ended`-Status bearbeitbar, solange das Ergebnis nicht veröffentlicht ist. Die Endergebnisse trägt die Wahlleitung im Reiter
+„Ergebnisse eintragen“ direkt als Stimmenzahl pro Kandidat/in ein; `services.set_manual_results` schreibt sie unmittelbar nach
+`votes` (kein Umweg über Codes/Urne, weil keine laufende geheime Abstimmung zu schützen ist). Ab dort läuft alles wie gewohnt
+weiter: Stichwahl-Entscheidung, Veröffentlichen, Archiv. Eine daraus angelegte Stichwahl ist wieder eine normale `"live"`-Wahl mit
+echten Codes.
+
 ## 5. Ersteinrichtung, Benutzer, Rollen
 
 * **Frische Installation:** Es gibt noch keinen Benutzer. Beim Start erzeugt `accounts.ensure_setup_code` einen Einrichtungscode (Datenbank, Log, `setup.sh`).

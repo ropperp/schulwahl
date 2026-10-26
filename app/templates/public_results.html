@@ -3,6 +3,8 @@
 {% block title %}Ergebnis{% endblock %}
 {% block content %}
 <div class="hero"><h1>Ergebnis</h1><p>{{ e.name }}</p></div>
+{% if e.source != 'manual' %}
 {{ participation_block(part) }}
+{% endif %}
 {{ results_block(results) }}
 {% endblock %}

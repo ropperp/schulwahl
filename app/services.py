@@ -19,6 +19,9 @@ CODE_LENGTH = 6
 # Der Wahlname steht auf jedem Code-Zettel (3 Zettel pro Zeile): länger wäre dort nicht mehr lesbar
 ELECTION_NAME_MAX = 40
 
+# Deckelt die Eingabe beim Nachtragen von Ergebnissen (mehr Stimmen als Schüler/innen an der Schule sind unsinnig)
+MAX_MANUAL_VOTES = 5000
+
 
 def name_problem(name: str) -> str | None:
     """Fehlermeldung, wenn der Wahlname länger als erlaubt ist, sonst None."""
@@ -211,6 +214,21 @@ def _wipe_empty_urn(db: Session) -> None:
         db.rollback()
 
 
+# ------------------------------------------------------- Nachtragen (manuelle Wahl)
+
+def set_manual_results(db: Session, race: Race, counts: dict[int, int], invalid: int) -> None:
+    """Ersetzt die Stimmen eines Wahlgangs einer manuell erfassten (bereits analog durchgeführten) Wahl.
+
+    Nur für Wahlen mit `source == "manual"` gedacht: dort gibt es keine Codes und keine laufende, geheime
+    Stimmabgabe zu schützen - die Endergebnisse sind bereits ausgezählt und werden hier direkt eingetragen.
+    """
+    counts = {cid: min(max(0, n), MAX_MANUAL_VOTES) for cid, n in counts.items()}
+    invalid = min(max(0, invalid), MAX_MANUAL_VOTES)
+    db.execute(delete(Vote).where(Vote.race_id == race.id))
+    db.add_all(Vote(id=uuid.uuid4().hex, race_id=race.id, candidate_id=cid) for cid, n in counts.items() for _ in range(n))
+    db.add_all(Vote(id=uuid.uuid4().hex, race_id=race.id, candidate_id=None) for _ in range(invalid))
+
+
 # ---------------------------------------------------------------- Auswertung
 
 def participation(db: Session, election: Election) -> dict:
@@ -357,7 +375,10 @@ def compute_results(db: Session, election: Election) -> list[dict]:
         for r in rows:
             r["percent"] = round(100 * r["votes"] / valid, 1) if valid else 0.0
         decision = decide(rows, race.runoff_kind)
-        expected = part["used"] if race.department_id is None else used_by_dept.get(race.department_id, 0)
+        if election.source == "manual":
+            expected = valid + invalid  # keine Codes: die eingetragene Stimmenzahl ist per Definition "erwartet"
+        else:
+            expected = part["used"] if race.department_id is None else used_by_dept.get(race.department_id, 0)
         advice = runoff_advice(rows, decision, valid, race.runoff_kind)
         results.append({
             "race": race,

@@ -10,7 +10,11 @@
   </ul>
   <div class="row gap wrap">
     <a class="btn" href="/admin/elections/{{ e.id }}/candidates">Kandidat/innen verwalten</a>
+    {% if e.source == 'manual' %}
+    <a class="btn" href="/admin/elections/{{ e.id }}/manual-results">Ergebnisse eintragen</a>
+    {% else %}
     <a class="btn" href="/admin/elections/{{ e.id }}/codes">Codes erzeugen &amp; drucken</a>
+    {% endif %}
   </div>
 </section>
 
@@ -27,10 +31,12 @@
     <form method="post" action="/admin/elections/{{ e.id }}/delete" class="inline" data-confirm="Wahl samt Codes und Stimmen ENDGÜLTIG löschen?">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn ghost">🗑 Löschen</button></form>
   </div>
+  {% if e.source != 'manual' %}
   <p class="muted small">Beteiligung bisher: {{ part.used }} von {{ part.total }} Codes ({{ '%.1f'|format(part.percent) }} %).</p>
+  {% endif %}
 </section>
 
-{% if status != 'ended' %}
+{% if status != 'ended' or e.source == 'manual' %}
 <section class="card">
   <h2>Name &amp; Zeitfenster</h2>
   <form method="post" action="/admin/elections/{{ e.id }}/settings">

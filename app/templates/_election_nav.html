@@ -5,6 +5,10 @@
 <nav class="tabs">
   <a href="/admin/elections/{{ e.id }}" class="{{ 'on' if tab == 'overview' }}">Übersicht</a>
   <a href="/admin/elections/{{ e.id }}/candidates" class="{{ 'on' if tab == 'candidates' }}">Kandidat/innen</a>
+  {% if e.source == 'manual' %}
+  <a href="/admin/elections/{{ e.id }}/manual-results" class="{{ 'on' if tab == 'manual_results' }}">Ergebnisse eintragen</a>
+  {% else %}
   <a href="/admin/elections/{{ e.id }}/codes" class="{{ 'on' if tab == 'codes' }}">Codes</a>
+  {% endif %}
   <a href="/admin/elections/{{ e.id }}/dashboard" class="{{ 'on' if tab == 'dashboard' }}">Dashboard</a>
 </nav>

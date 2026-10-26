@@ -51,7 +51,15 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 ## Stichwahl-Entscheidung
 - `Race.runoff_decision`: `""` offen, `yes`, `no` (setzt die Wahlleitung pro Wahlgang nach Wahlende, Route `/admin/races/{id}/runoff-decision`; gesperrt solange `results_public`).
 - `services.runoff_advice()` liefert nur die **Empfehlung** (mehr als 2 Kandidat/innen ohne >50 % oder Gleichstand) und den `plan` (Kandidat/innen einer Stichwahl: Gleichstand Platz 1 / Top 2 inkl. Gleichplatzierte / Gleichstand Platz 2 = `deputy`). Die Entscheidung trifft nie das System.
-- Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`; `runoff-all` fasst alle `yes`-Wahlgänge in EINER neuen Wahl zusammen (`_build_runoff`; Abteilungs-Wahlgänge an ihre Abteilung gebunden, Abteilungen ohne Stichwahl entfallen). Platz 2 ist immer Stellvertretung (`decide()`).
+- Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`; `runoff-all` fasst alle `yes`-Wahlgänge in EINER neuen Wahl zusammen (`_build_runoff`; Abteilungs-Wahlgänge an ihre Abteilung gebunden, Abteilungen ohne Stichwahl entfallen). Platz 2 ist immer Stellvertretung (`decide()`). Eine neu angelegte Stichwahl ist immer `source="live"` (echte Codes), auch wenn sie aus einer manuellen Wahl entsteht.
+
+## Manuell erfasste Wahlen (`Election.source`)
+- `"live"` (Standard) = normale Wahl mit Codes. `"manual"` = bereits analog durchgeführte Wahl, deren Endergebnisse einmalig nachgetragen werden (z. B. die erste Runde vor einer jetzt folgenden digitalen Stichwahl) - ohne Codes, ohne Wahlgeheimnis-Mechanismus (die Zahlen sind schon öffentlich ausgezählt).
+- Anlegen über `/admin/elections/new` (Haken „Ergebnisse nachtragen“); Start/Ende dürfen in der Vergangenheit liegen, die Wahl ist sofort `ended`.
+- `structure_locked()` lässt bei `source == "manual"` Wahlgänge/Kandidat/innen bearbeiten, solange `results_public` falsch ist (sonst wäre wegen des sofortigen `ended`-Status nichts mehr änderbar).
+- `services.set_manual_results()` schreibt die eingetragenen Stimmenzahlen direkt nach `votes` (Route `/admin/elections/{id}/manual-results`, ersetzt bestehende Stimmen des Wahlgangs vollständig). Kein Umweg über Codes/Urne nötig, weil keine laufende geheime Abstimmung zu schützen ist.
+- `compute_results()`: bei `source == "manual"` ist die Konsistenzprüfung immer erfüllt (`expected = valid + invalid`, es gibt keine Codes zum Abgleich). Dashboard/öffentliche Ergebnisseite blenden die Wahlbeteiligung (Codes) für solche Wahlen aus.
+- Ab dann läuft alles normal weiter: Stichwahl-Entscheidung, Veröffentlichen, Archiv (`/vergangene`, `/ergebnis/{id}`) unterscheiden nicht, wie die `votes`-Zeilen entstanden sind.
 
 ## Design (HTL-1-Designrichtlinien)
 - Farben: Dunkelblau `#002f45` (Kopf/Footer/dunkler Grund), Hellblau `#0088ad` (Akzent); Abteilungen `.dept-mb/et/me/lu` (`#004e8c`, `#d2232a`, `#007a8b`, `#19682d`) über den Jinja-Filter `dept_class` (`web.py`). Tokens als CSS-Variablen in `static/style.css`, Hell/Dunkel über `data-theme` + `prefers-color-scheme`.
