@@ -122,6 +122,11 @@ def verify_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(actual, expected)
 
 
+def normalize_username(raw: str) -> str:
+    """Benutzernamen vereinheitlichen (Leerzeichen am Rand weg, Kleinschreibung)."""
+    return raw.strip().lower()
+
+
 _DUMMY_HASH = hash_password(secrets.token_hex(8))
 
 
@@ -148,11 +153,6 @@ def random_password(length: int = 14) -> str:
     """Zufallspasswort ohne leicht verwechselbare Zeichen (für Erstpasswörter, die der Admin vergibt)."""
     alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(length))
-
-
-def normalize_username(raw: str) -> str:
-    """Benutzernamen vereinheitlichen (Leerzeichen weg, Kleinschreibung)."""
-    return raw.strip().lower()
 
 
 def username_problem(name: str) -> str | None:
