@@ -1,3 +1,9 @@
+"""Datenbank-Verbindung, Anlegen der Tabellen und kleine automatische Updates.
+
+Es gibt kein Alembic: neue Tabellen legt `create_all` selbst an, neue SPALTEN an bestehenden Tabellen müssen zusätzlich in
+`_NEW_COLUMNS` eingetragen werden (siehe docs/ENTWICKLUNG.md). Bei PostgreSQL schützt eine Sperre davor, dass mehrere
+Worker-Prozesse gleichzeitig Tabellen anlegen.
+"""
 import time
 
 from sqlalchemy import create_engine, inspect, text
@@ -13,6 +19,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def get_db():
+    """FastAPI-Abhängigkeit: eine Datenbank-Sitzung pro Anfrage, wird am Ende immer geschlossen."""
     db = SessionLocal()
     try:
         yield db
@@ -41,6 +48,7 @@ _NEW_COLUMNS = [
     ("candidates", "image_id", "INTEGER REFERENCES images(id)"),
     ("elections", "code_mode", "VARCHAR(20) NOT NULL DEFAULT 'department'"),
     ("races", "runoff_kind", "VARCHAR(20) NOT NULL DEFAULT ''"),
+    ("races", "runoff_decision", "VARCHAR(10) NOT NULL DEFAULT ''"),
     ("codes", "group_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
 ]
 

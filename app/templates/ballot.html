@@ -2,11 +2,12 @@
 {% block title %}Stimmzettel{% endblock %}
 {% block mainclass %}narrow{% endblock %}
 {% block content %}
-<section class="card">
+<div class="hero">
   <h1>Stimmzettel</h1>
-  <p class="muted">{{ election.name }} · Abteilung {{ department }}</p>
-  {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
-  <form method="post" action="/vote/review">
+  <p>{{ election.name }} · <span class="tag {{ department|dept_class }}">{{ department }}</span></p>
+</div>
+{% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/vote/review">
     <input type="hidden" name="code" value="{{ code }}">
     {% for race in races %}
     <fieldset class="race">
@@ -25,7 +26,6 @@
       </label>
     </fieldset>
     {% endfor %}
-    <button class="btn primary big" type="submit">Weiter zur Zusammenfassung</button>
-  </form>
-</section>
+    <button class="btn primary big go" type="submit">Weiter zur Zusammenfassung</button>
+</form>
 {% endblock %}

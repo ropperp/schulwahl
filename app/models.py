@@ -12,10 +12,12 @@ from .timeutil import utcnow
 
 
 class Base(DeclarativeBase):
+    """Gemeinsame Basisklasse aller Tabellen (SQLAlchemy)."""
     pass
 
 
 class Election(Base):
+    """Eine Wahl mit Zeitfenster, Status (aus Start/Ende/closed_at berechnet) und Code-Modus."""
     __tablename__ = "elections"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -38,6 +40,7 @@ class Election(Base):
 
 
 class Department(Base):
+    """Eine Abteilung einer Wahl (z. B. Elektrotechnik); Codes und Abteilungs-Wahlgänge gehören dazu."""
     __tablename__ = "departments"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -59,6 +62,8 @@ class Race(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     # Stichwahl: "" = normaler Wahlgang, "speaker" = Stichwahl um Platz 1, "deputy" = Stichwahl um die Stellvertretung
     runoff_kind: Mapped[str] = mapped_column(String(20), default="", server_default="")
+    # Entscheidung der Wahlleitung nach Wahlende: "" = offen, "yes" = Stichwahl durchführen, "no" = keine Stichwahl
+    runoff_decision: Mapped[str] = mapped_column(String(10), default="", server_default="")
 
     election: Mapped[Election] = relationship(back_populates="races")
     department: Mapped[Department | None] = relationship()
@@ -69,6 +74,7 @@ class Race(Base):
 
 
 class Candidate(Base):
+    """Ein Kandidat bzw. eine Kandidatin eines Wahlgangs, optional mit Foto (Image)."""
     __tablename__ = "candidates"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -81,6 +87,7 @@ class Candidate(Base):
 
 
 class Code(Base):
+    """Ein einmaliger Wahlcode. Er weiß nur, DASS er benutzt wurde (`used`), nie was damit gewählt wurde."""
     __tablename__ = "codes"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -95,6 +102,7 @@ class Code(Base):
 
 
 class Vote(Base):
+    """Eine ausgezählte Stimme (nur nach Wahlende befüllt). Bewusst OHNE Verweis auf einen Code (Wahlgeheimnis)."""
     __tablename__ = "votes"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)  # zufällige UUID, keine Reihenfolge
@@ -158,6 +166,7 @@ class Image(Base):
 
 
 class Setting(Base):
+    """Einstellung als Schlüssel/Wert (Schulname, Logo, QR-Adresse, Einrichtungscode)."""
     __tablename__ = "settings"
 
     key: Mapped[str] = mapped_column(String(50), primary_key=True)

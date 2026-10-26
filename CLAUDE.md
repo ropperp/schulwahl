@@ -27,10 +27,12 @@ app/db.py              Engine, init_db() (Advisory-Lock bei PostgreSQL wegen meh
 app/models.py          Election, Department, Race, Candidate, Code, Vote, PendingBallot, Image, Setting, User, AuditLog
 app/services.py        Status, Codes, cast_vote, flush_ballots (Urne), Auswertung (compute_results, decide), delete_election
 app/security.py        Passwörter (scrypt), Rollen/Abhängigkeiten (require_staff/require_admin, staff_form/admin_form), CSRF, Limiter, audit()
-app/accounts.py        Start-Admin aus ADMIN_PASSWORD, set_password()
+app/candidate_io.py    Export/Import von Wahlgängen + Kandidaten (JSON, Fotos als Base64, strenge Prüfung vor dem Speichern)
+app/accounts.py        Ersteinrichtung (Einrichtungscode, complete_setup), optional Start-Admin aus ADMIN_PASSWORD, set_password()
 app/manage.py          Kommandozeile (list-users, reset-password, create-user)
-app/routes_vote.py     Schülerseite  |  routes_account.py: Login, Konto, Benutzer, Protokoll  |  routes_admin.py: Wahlen, Codes, Einstellungen
-app/routes_public.py   Ergebnis, Archiv, Bilder (Kandidatenfotos kurz im Speicher gecacht)
+app/routes/            vote.py (Schüler) | public.py (Ergebnis, Archiv, Bilder) | auth.py (Login, Ersteinrichtung /admin/setup, Konto) | users.py (Benutzer, Protokoll)
+                       settings.py (Einstellungen) | elections.py (Wahlen, Dashboard, Stichwahlen, Exporte) | candidates.py | codes.py | common.py (Hilfen)
+docs/ENTWICKLUNG.md    Entwickler-Handbuch; app/README.md Dateiübersicht. tests/test_docs.py erzwingt Erklärungssätze (Docstrings) für jede Funktion/Klasse/Datei
 app/settings.py        Schulname/Logo/QR-Adresse aus DB, Cache nur 5 s (mehrere Worker!)
 app/pdfs.py, images.py, timeutil.py, web.py
 scripts/               backup.sh, restore.sh, loadtest.py   |  deploy/nginx.conf.example  |  docs/ (INSTALLATION, BETRIEB, SICHERHEIT)
@@ -46,9 +48,21 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 - Beide Stimmen (Schulsprecher + Abteilung) in einem Schritt; `review` speichert nichts. Kandidatenreihenfolge pro Stimmzettel zufällig (`race.ballot_candidates`, nicht die persistierte Liste verändern!).
 - Wahl-Status `planned | running | ended` aus Start/Ende/`closed_at`. Ergebnisse, CSV, Protokoll erst nach Ende. Verwendete Codes sind nie löschbar.
 
+## Stichwahl-Entscheidung
+- `Race.runoff_decision`: `""` offen, `yes`, `no` (setzt die Wahlleitung pro Wahlgang nach Wahlende, Route `/admin/races/{id}/runoff-decision`; gesperrt solange `results_public`).
+- `services.runoff_advice()` liefert nur die **Empfehlung** (mehr als 2 Kandidat/innen ohne >50 % oder Gleichstand) und den `plan` (Kandidat/innen einer Stichwahl: Gleichstand Platz 1 / Top 2 inkl. Gleichplatzierte / Gleichstand Platz 2 = `deputy`). Die Entscheidung trifft nie das System.
+- Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`; `runoff-all` fasst alle `yes`-Wahlgänge in EINER neuen Wahl zusammen (`_build_runoff`; Abteilungs-Wahlgänge an ihre Abteilung gebunden, Abteilungen ohne Stichwahl entfallen). Platz 2 ist immer Stellvertretung (`decide()`).
+
+## Design (HTL-1-Designrichtlinien)
+- Farben: Dunkelblau `#002f45` (Kopf/Footer/dunkler Grund), Hellblau `#0088ad` (Akzent); Abteilungen `.dept-mb/et/me/lu` (`#004e8c`, `#d2232a`, `#007a8b`, `#19682d`) über den Jinja-Filter `dept_class` (`web.py`). Tokens als CSS-Variablen in `static/style.css`, Hell/Dunkel über `data-theme` + `prefers-color-scheme`.
+- Schriften: Fließtext `Bahnschrift` (nur `local`, Microsoft-Lizenz verbietet Auslieferung) → `Barlow` (OFL, in `static/fonts/`); Überschriften/Fett `Roadgeek 2005 Mittelschrift` (Lizenztext liegt bei); Schönschrift `Morsal` nur wenn auf dem Gerät installiert (nicht lizenziert, nicht im Repo). **Keine Schriften von CDNs.**
+- `static/theme.js` wird **synchron im `<head>`** geladen (kein Aufblitzen) und speichert die Wahl in `localStorage` (kein Cookie!). Kopf `base.html`, Footer `_footer.html` (Daten der HTL 1 fest eingetragen), Backoffice-Menü per `<details>` in `admin_base.html`.
+- Gedruckte PDFs: **nur Schwarz auf Weiß** (Toner sparen); Logos über `pdfs.logo_for_print` (weißes Logo wird schwarze Silhouette). Test: `tests/test_design.py`.
+
 ## Benutzer, Rollen, Sitzungen
-- Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). Erster Start: Benutzer `admin` mit `ADMIN_PASSWORD`.
+- Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). **Ersteinrichtung:** keine Benutzer → `/admin` leitet auf `/admin/setup` (Einrichtungscode aus DB/Log/`manage setup-code` + Admin-Passwort + Schulname + QR-Adresse); danach ist die Seite gesperrt. `ADMIN_PASSWORD` ist nur optional (Tests, automatische Installation).
 - **Jede neue Route unter `/admin` braucht `require_staff`/`require_admin` bzw. `staff_form`/`admin_form`.** `tests/test_security.py` prüft automatisch alle Routen (Login, CSRF, Rollen) und schlägt sonst fehl.
+- Zweiter Administrator über Benutzer → Rolle; nie sich selbst/letzten Admin löschen.
 - Nur Admin: Einstellungen (inkl. QR-Adresse `public_url`), Benutzer, Protokoll, Wahl löschen. Wahlleiter: alles andere.
 - Verwaltungsaktionen mit `audit(db, request, "aktion", "detail")` protokollieren (wird mit dem nächsten `commit` gespeichert).
 - QR-Adresse: `settings.public_url(request)` (DB-Einstellung > `PUBLIC_URL` > aktuelle Adresse); nicht per Parameter überschreibbar.

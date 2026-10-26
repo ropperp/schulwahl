@@ -24,6 +24,18 @@
 
 {{ participation_block(part) }}
 
+{% if combined|length > 1 and not e.results_public %}
+<section class="card">
+  <h2>Stichwahlen gesammelt anlegen</h2>
+  <p>Für <strong>{{ combined|length }} Wahlgänge</strong> ist eine Stichwahl vorgesehen:</p>
+  <ul>{% for r in combined %}<li>{{ r.race.title }}{% if r.department %} ({{ r.department }}){% else %} (alle Abteilungen){% endif %}: {{ r.plan|map(attribute='name')|join(', ') }}</li>{% endfor %}</ul>
+  <p>In <strong>einer</strong> gemeinsamen Wahl hat jede Person nur <strong>einen Code</strong> und wählt alle Stichwahlen, die für die eigene Abteilung gelten.
+    Es nehmen teil: <strong>{{ combined_depts|join(', ') }}</strong>{% if combined_depts|length < e.departments|length %} (die übrigen Abteilungen bekommen keine Stichwahl und keine Codes){% endif %}.</p>
+  <form method="post" action="/admin/elections/{{ e.id }}/runoff-all" class="inline" data-confirm="Alle {{ combined|length }} Stichwahlen in einer neuen Wahl anlegen?">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn primary">Alle Stichwahlen in einer Wahl anlegen</button></form>
+</section>
+{% endif %}
+
 {% if results is not none %}
 {{ results_block(results, e, csrf(request)) }}
 {% else %}

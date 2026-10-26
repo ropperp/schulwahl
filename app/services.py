@@ -16,7 +16,31 @@ ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 6
 
 
+# Der Wahlname steht auf jedem Code-Zettel (3 Zettel pro Zeile): länger wäre dort nicht mehr lesbar
+ELECTION_NAME_MAX = 40
+
+
+def name_problem(name: str) -> str | None:
+    """Fehlermeldung, wenn der Wahlname länger als erlaubt ist, sonst None."""
+    if len(name) > ELECTION_NAME_MAX:
+        return (f"Der Name ist zu lang ({len(name)} Zeichen, höchstens {ELECTION_NAME_MAX}). "
+                "Er wird auf die Code-Zettel gedruckt und muss dort Platz haben.")
+    return None
+
+
+def short_name(*parts: str) -> str:
+    """Setzt einen Wahlnamen aus Teilen zusammen und lässt hinten weg, was nicht mehr in die Begrenzung passt."""
+    name = ""
+    for part in parts:
+        candidate = f"{name} {part}".strip() if part else name
+        if len(candidate) > ELECTION_NAME_MAX:
+            break
+        name = candidate
+    return name or parts[0][:ELECTION_NAME_MAX].rstrip()
+
+
 class VoteError(Exception):
+    """Stimmabgabe nicht möglich; `kind` sagt warum (notfound, used, closed, notstarted, choice)."""
     def __init__(self, message: str, kind: str = "invalid"):
         super().__init__(message)
         self.message = message
@@ -43,6 +67,7 @@ STATUS_LABEL = {"planned": "Geplant", "running": "Läuft", "ended": "Beendet"}
 # ---------------------------------------------------------------- Codes
 
 def normalize_code(raw: str | None) -> str:
+    """Code vereinheitlichen: nur Buchstaben/Ziffern, groß geschrieben (Leerzeichen und Bindestriche egal)."""
     return re.sub(r"[^A-Za-z0-9]", "", raw or "").upper()
 
 
@@ -67,6 +92,7 @@ def generate_codes(db: Session, election: Election, department: Department, coun
 # ---------------------------------------------------------------- Stimmabgabe
 
 def lookup_code(db: Session, raw: str | None) -> Code:
+    """Sucht den Code in der Datenbank oder wirft VoteError(notfound)."""
     code = normalize_code(raw)
     found = db.scalar(select(Code).where(Code.code == code)) if len(code) == CODE_LENGTH else None
     if found is None:
@@ -188,6 +214,7 @@ def _wipe_empty_urn(db: Session) -> None:
 # ---------------------------------------------------------------- Auswertung
 
 def participation(db: Session, election: Election) -> dict:
+    """Beteiligung (verwendete/erzeugte Codes) gesamt, je Abteilung und je Klasse."""
     rows = db.execute(
         select(
             Code.department_id,
@@ -200,6 +227,7 @@ def participation(db: Session, election: Election) -> dict:
     ).all()
 
     def pct(used, total):
+        """Prozentwert, 0 bei leerem Nenner."""
         return round(100 * used / total, 1) if total else 0.0
 
     by_dept: dict[int, list[int]] = {}
@@ -254,7 +282,51 @@ def decide(rows: list[dict], runoff_kind: str = "") -> dict:
     return out
 
 
+def runoff_advice(rows: list[dict], decision: dict, valid: int, runoff_kind: str = "") -> dict:
+    """Empfehlung zur Stichwahl (die Wahlleitung entscheidet) und die Kandidat/innen, die in einer Stichwahl antreten würden.
+
+    Empfohlen wird eine Stichwahl bei Stimmengleichheit und bei mehr als zwei Kandidat/innen, wenn niemand mehr als die
+    Hälfte der gültigen Stimmen hat. Bei nur zwei Kandidat/innen bringt eine Stichwahl nichts.
+    """
+    n = len(rows)
+    top = rows[0] if rows else None
+    majority = bool(valid) and top["votes"] * 2 > valid
+    if valid == 0:
+        recommend, reason = False, "Es gibt keine gültigen Stimmen."
+    elif decision["runoff_first"]:
+        recommend, reason = True, "Stimmengleichheit um Platz 1 - ohne Stichwahl gibt es keine Entscheidung."
+    elif runoff_kind == "deputy":
+        recommend, reason = False, "Das war bereits die Stichwahl um die Stellvertretung."
+    elif n <= 2:
+        recommend, reason = False, (f"Nur {n} Kandidat/innen - eine Stichwahl bringt hier nichts "
+                                    f"({top['candidate'].name}: {top['percent']:.1f} % der gültigen Stimmen).")
+    elif majority and decision["runoff_second"]:
+        recommend, reason = True, "Stimmengleichheit um Platz 2 (Stellvertretung)."
+    elif majority:
+        recommend, reason = False, f"{top['candidate'].name} hat die absolute Mehrheit ({top['percent']:.1f} % der gültigen Stimmen)."
+    else:
+        recommend = True
+        reason = (f"{top['candidate'].name} hat nur {top['percent']:.1f} % der gültigen Stimmen - keine absolute Mehrheit "
+                  f"(mehr als 50 %) bei {n} Kandidat/innen.")
+
+    voted = [r for r in rows if r["votes"] > 0]
+    if decision["runoff_first"]:
+        plan_kind, plan = "speaker", list(decision["runoff_first"])
+    elif majority and decision["runoff_second"] and runoff_kind != "deputy":
+        plan_kind, plan = "deputy", list(decision["runoff_second"])
+    elif voted:
+        second_votes = next((r["votes"] for r in voted if r["votes"] < voted[0]["votes"]), None)
+        group = [r["candidate"] for r in voted if second_votes is not None and r["votes"] == second_votes]
+        plan_kind, plan = "speaker", ([voted[0]["candidate"]] + group if group else [])
+    else:
+        plan_kind, plan = "speaker", []
+    if runoff_kind == "deputy" and plan_kind == "speaker":
+        plan_kind = "deputy"
+    return {"recommend": recommend, "reason": reason, "majority": majority, "plan_kind": plan_kind, "plan": plan}
+
+
 def compute_results(db: Session, election: Election) -> list[dict]:
+    """Zählt alle Wahlgänge einer beendeten Wahl aus (übernimmt zuerst die Urne), inkl. Konsistenzprüfung und Empfehlung zur Stichwahl."""
     flush_ballots(db, election)
     races = list(
         db.scalars(
@@ -286,6 +358,7 @@ def compute_results(db: Session, election: Election) -> list[dict]:
             r["percent"] = round(100 * r["votes"] / valid, 1) if valid else 0.0
         decision = decide(rows, race.runoff_kind)
         expected = part["used"] if race.department_id is None else used_by_dept.get(race.department_id, 0)
+        advice = runoff_advice(rows, decision, valid, race.runoff_kind)
         results.append({
             "race": race,
             "department": race.department.name if race.department else None,
@@ -296,6 +369,8 @@ def compute_results(db: Session, election: Election) -> list[dict]:
             "expected": expected,
             "consistent": valid + invalid == expected,
             "tie": len(decision["leaders"]) > 1,
+            "decision": race.runoff_decision,
+            **advice,
             **decision,
         })
     return results

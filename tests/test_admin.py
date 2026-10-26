@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 
 from app.models import Candidate, Code, Election
 from app.timeutil import input_local, utcnow
-from tests.conftest import admin_login, ballot_choices, csrf, make_codes, vote_count
+from tests.conftest import admin_login, ballot_choices, csrf, decide_all, make_codes, vote_count
 
 
 def test_admin_requires_login(client, election):
@@ -109,6 +109,7 @@ def test_results_hidden_until_end_then_shown(client, db, election):
 
     # Veröffentlichen
     assert client.get(f"/ergebnis/{election.id}").status_code == 404
+    decide_all(client, db, election, token)
     client.post(f"/admin/elections/{election.id}/publish", data={"csrf_token": token})
     pub = client.get(f"/ergebnis/{election.id}")
     assert pub.status_code == 200 and "Anna" in pub.text

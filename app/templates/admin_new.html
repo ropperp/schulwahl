@@ -5,10 +5,11 @@
 <section class="card">
   <h1>Neue Wahl</h1>
   {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
-  <form method="post" action="/admin/elections">
+  <form method="post" action="/admin/elections" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <label for="name">Name der Wahl</label>
-    <input id="name" name="name" placeholder="Schulsprecherwahl 2026" required>
+    <input id="name" name="name" placeholder="Schulsprecherwahl 2026" maxlength="40" required>
+    <p class="muted small">Höchstens 40 Zeichen – der Name wird auf die Code-Zettel gedruckt.</p>
     <div class="grid2">
       <div><label for="start_at">Start</label><input id="start_at" name="start_at" type="datetime-local" value="{{ start }}" required></div>
       <div><label for="end_at">Ende</label><input id="end_at" name="end_at" type="datetime-local" value="{{ end }}" required></div>
@@ -24,6 +25,9 @@ Maschinenbau</textarea>
       <span><strong>Pro Klasse</strong><br><span class="muted small">Beim Erzeugen gibst du die Klasse an (z. B. 5AHD, 22 Codes). Das Dashboard zeigt dann auch die Beteiligung je Klasse.</span></span></label>
     <label class="check"><input type="checkbox" name="standard_races" value="1" checked>
       Standard-Wahlgänge anlegen (Schulsprecher/in für alle + Abteilungssprecher/in je Abteilung)</label>
+    <label for="import_file">Kandidat/innen aus einer Export-Datei übernehmen (optional)</label>
+    <input id="import_file" name="import_file" type="file" accept="application/json,.json">
+    <p class="muted small">Die Datei stammt aus einer früheren Wahl („Kandidat/innen exportieren“). Abteilungen aus der Datei, die oben fehlen, werden ergänzt.</p>
     <button class="btn primary big" type="submit">Wahl anlegen</button>
   </form>
 </section>

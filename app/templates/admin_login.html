@@ -4,7 +4,6 @@
 {% block content %}
 <section class="card">
   <h1>Backoffice</h1>
-  {% if disabled %}<div class="alert error">Es gibt noch keinen Benutzer. Beim ersten Start wird der Benutzer „admin“ mit dem Passwort aus der Datei .env (ADMIN_PASSWORD) angelegt. Bitte dort eintragen und neu starten (siehe Installationsanleitung).</div>{% endif %}
   {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
   <form method="post" action="/admin/login">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">

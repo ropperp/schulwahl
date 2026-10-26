@@ -17,6 +17,7 @@ from .models import AuditLog, User
 
 
 class LoginRequired(Exception):
+    """Nicht angemeldet (wird in main.py zur Weiterleitung auf die Anmeldeseite)."""
     pass
 
 
@@ -34,6 +35,7 @@ class FailureLimiter:
         self._lock = threading.Lock()
 
     def _prune(self, key: str, now: float) -> deque:
+        """Entfernt abgelaufene Fehlversuche eines Schlüssels."""
         q = self._fails[key]
         while q and q[0] <= now - self.window:
             q.popleft()
@@ -53,6 +55,7 @@ class FailureLimiter:
     MAX_KEYS = 10_000
 
     def fail(self, key: str) -> None:
+        """Merkt einen Fehlversuch; räumt bei zu vielen Schlüsseln abgelaufene auf (Speicherschutz)."""
         now = time.monotonic()
         with self._lock:
             self._prune(key, now).append(now)
@@ -61,6 +64,7 @@ class FailureLimiter:
                     del self._fails[k]
 
     def reset(self) -> None:
+        """Vergisst alle Fehlversuche (für Tests)."""
         with self._lock:
             self._fails.clear()
 
@@ -71,6 +75,7 @@ user_limiter = FailureLimiter(config.LOGIN_USER_MAX_FAILS, config.LOGIN_USER_WIN
 
 
 def client_ip(request: Request) -> str:
+    """IP des Besuchers; X-Forwarded-For nur mit TRUST_PROXY=1 (Proxy muss den Header ERSETZEN)."""
     if config.TRUST_PROXY:
         fwd = request.headers.get("x-forwarded-for", "")
         if fwd:
@@ -92,16 +97,19 @@ _WEAK = {"passwort123", "password123", "1234567890", "0123456789", "qwertzuiop",
 
 
 def _b64(raw: bytes) -> str:
+    """Bytes als Base64-Text."""
     return base64.b64encode(raw).decode()
 
 
 def hash_password(password: str) -> str:
+    """Passwort-Hash mit scrypt und zufälligem Salz: `scrypt$N$r$p$salt$hash`."""
     salt = os.urandom(16)
     digest = hashlib.scrypt(password.encode(), salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P, dklen=32)
     return f"scrypt${_SCRYPT_N}${_SCRYPT_R}${_SCRYPT_P}${_b64(salt)}${_b64(digest)}"
 
 
 def verify_password(password: str, stored: str) -> bool:
+    """Prüft ein Passwort gegen einen gespeicherten Hash (zeitkonstant)."""
     try:
         scheme, n, r, p, salt, digest = stored.split("$")
         if scheme != "scrypt":
@@ -112,6 +120,11 @@ def verify_password(password: str, stored: str) -> bool:
     except (ValueError, TypeError):
         return False
     return hmac.compare_digest(actual, expected)
+
+
+def normalize_username(raw: str) -> str:
+    """Benutzernamen vereinheitlichen (Leerzeichen am Rand weg, Kleinschreibung)."""
+    return raw.strip().lower()
 
 
 _DUMMY_HASH = hash_password(secrets.token_hex(8))
@@ -142,11 +155,8 @@ def random_password(length: int = 14) -> str:
     return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
-def normalize_username(raw: str) -> str:
-    return raw.strip().lower()
-
-
 def username_problem(name: str) -> str | None:
+    """Fehlermeldung, wenn der Benutzername nicht erlaubt ist, sonst None."""
     import re
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,29}", name):
         return "Der Benutzername muss 3–30 Zeichen lang sein und darf nur Kleinbuchstaben, Zahlen, Punkt, Strich und Unterstrich enthalten."
@@ -164,6 +174,7 @@ def login_user(request: Request, user: User) -> None:
 
 
 def current_user(request: Request, db: Session) -> User | None:
+    """Der angemeldete Benutzer aus der Sitzung, nur wenn die Sitzungsversion noch stimmt; sonst None."""
     uid, sv = request.session.get("uid"), request.session.get("sv")
     if not isinstance(uid, int) or not isinstance(sv, int):
         return None
@@ -195,6 +206,7 @@ def require_admin(user: User = Depends(require_staff)) -> User:
 
 
 def csrf_token(request: Request) -> str:
+    """CSRF-Token der Sitzung (wird bei Bedarf erzeugt); steckt als Hidden-Feld in jedem Formular."""
     token = request.session.get("csrf")
     if not token:
         token = secrets.token_urlsafe(32)
@@ -203,6 +215,7 @@ def csrf_token(request: Request) -> str:
 
 
 def verify_csrf(request: Request, form) -> None:
+    """Bricht mit 403 ab, wenn das CSRF-Token des Formulars nicht zur Sitzung passt."""
     expected = request.session.get("csrf", "")
     given = form.get("csrf_token", "")
     if not expected or not hmac.compare_digest(str(given).encode(), expected.encode()):
@@ -224,6 +237,7 @@ async def admin_form(request: Request, user: User = Depends(require_admin)):
 
 
 async def public_form(request: Request):
+    """Formulardaten öffentlicher Seiten (ohne Anmeldung, ohne CSRF; die Schülerseiten haben keine Sitzung)."""
     return await request.form()
 
 

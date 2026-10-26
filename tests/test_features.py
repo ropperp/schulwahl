@@ -5,7 +5,7 @@ from sqlalchemy import func, select
 from app.models import Candidate, Code, Election, Race
 from app.services import decide
 from app.timeutil import input_local, utcnow
-from tests.conftest import admin_login, ballot_choices, make_codes
+from tests.conftest import admin_login, ballot_choices, decide_all, make_codes
 
 
 class C:  # Mini-Kandidat für decide()
@@ -76,9 +76,13 @@ def test_runoff_creation_for_tie(client, db, election):
     vote_all(client, db, election, [(0, 0), (1, 1)])  # Anna 1 : Ben 1 -> Stichwahl
     client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
     dash = client.get(f"/admin/elections/{election.id}/dashboard").text
-    assert "Stimmengleichheit um Platz 1" in dash and "Stichwahl anlegen" in dash
-
+    assert "Stimmengleichheit um Platz 1" in dash and "Eine Stichwahl wird empfohlen" in dash
     school = election.races[0]
+    # ohne Entscheidung "ja" lässt sich keine Stichwahl anlegen
+    assert client.post(f"/admin/elections/{election.id}/runoff", data={"csrf_token": token, "race_id": school.id}).status_code == 303
+    assert db.scalar(select(func.count()).select_from(Election)) == 1
+    client.post(f"/admin/races/{school.id}/runoff-decision", data={"csrf_token": token, "answer": "yes"})
+    assert "Stichwahl anlegen" in client.get(f"/admin/elections/{election.id}/dashboard").text
     r = client.post(f"/admin/elections/{election.id}/runoff", data={"csrf_token": token, "race_id": school.id, "kind": "speaker"})
     assert r.status_code == 303
     new = db.scalars(select(Election).where(Election.id != election.id)).one()
@@ -89,6 +93,7 @@ def test_runoff_creation_for_tie(client, db, election):
 
     # kein Gleichstand im Abteilungs-Wahlgang -> keine Stichwahl
     dept_race = election.races[2]  # Maschinenbau: keine Stimmen, kein Gleichstand
+    client.post(f"/admin/races/{dept_race.id}/runoff-decision", data={"csrf_token": token, "answer": "yes"})
     client.post(f"/admin/elections/{election.id}/runoff", data={"csrf_token": token, "race_id": dept_race.id, "kind": "speaker"})
     assert db.scalar(select(func.count()).select_from(Election)) == 2
 
@@ -99,6 +104,7 @@ def test_past_elections_only_after_publish(client, db, election):
     vote_all(client, db, election, [(0, 0), (0, 0), (1, 0)])
     client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
     assert "Anna" not in client.get("/vergangene").text
+    decide_all(client, db, election, token)
     client.post(f"/admin/elections/{election.id}/publish", data={"csrf_token": token})
     page = client.get("/vergangene").text
     assert election.name in page and "Anna" in page and "Ben" in page and "Clara" in page

@@ -11,6 +11,7 @@ ALLOWED = {"PNG", "JPEG", "WEBP"}
 
 
 class ImageError(Exception):
+    """Das hochgeladene Bild ist unbrauchbar; die Meldung ist für Anwender/innen gedacht."""
     pass
 
 

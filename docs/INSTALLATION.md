@@ -60,13 +60,15 @@ cd schulwahl
 
 | Frage | Antwort |
 |---|---|
-| Name der Schule | z. B. `HTL 1 Klagenfurt` (später in der App änderbar) |
-| Startpasswort für „admin“ | **lang** (mind. 10 Zeichen), nur für den ersten Start – danach persönlich in der App ändern |
-| Datenbank-Passwort | **Enter** drücken → wird automatisch sicher erzeugt |
+| Datenbank-Passwort | **Enter** drücken → wird automatisch sicher erzeugt (oder eigenes eingeben) |
+| Geheimer Schlüssel | **1** → automatisch mit `openssl rand -hex 32` (empfohlen) oder **2** → selbst eingeben (mind. 32 Zeichen) |
 | Wie soll die Wahl erreichbar sein? | **2** (eigene Domain, Caddy kümmert sich um HTTPS) oder **4** (vorhandener Reverse-Proxy) |
+| Domain / Adresse | z. B. `wahl.htl1-klagenfurt.at` |
+| Port | Standard `8080` (bei Variante 2 nur intern, bei 4 der Port für den Proxy) |
 
+Schulname, Administrator-Passwort und die Adresse für die QR-Codes fragt das Skript **nicht**: Die legst du danach im Browser fest (Kapitel 5).
 Das Skript schreibt die `.env`, baut die App und startet alles. Beim ersten Mal dauert das einige Minuten.
-Am Ende steht „Fertig!“ mit der Adresse. Prüfen:
+Am Ende steht „Fertig!“ mit der Adresse und dem **Einrichtungscode**. Prüfen:
 
 ```bash
 docker compose ps                    # app und db: "healthy"
@@ -116,16 +118,18 @@ client_max_body_size 9m;
 ### Windows-Server
 
 Möglich mit *Docker Desktop (WSL2)*, aber für den Dauerbetrieb nicht empfohlen. Statt `setup.sh`:
-`.env.example` nach `.env` kopieren und ausfüllen (`ADMIN_PASSWORD`, `DB_PASSWORD`, `SECRET_KEY` = lange Zufallsfolge, `PUBLIC_URL`, bei HTTPS hinter Proxy
+`.env.example` nach `.env` kopieren und ausfüllen (`DB_PASSWORD`, `SECRET_KEY` = `openssl rand -hex 32` bzw. lange Zufallsfolge, `PORT`, `PUBLIC_URL`, bei HTTPS hinter Proxy
 `TRUST_PROXY=1` und `COOKIE_SECURE=1`), dann `docker compose up -d --build`. Einfacher: eine kleine Linux-VM (Hyper-V/VirtualBox) verwenden.
 
 ## 5. Erste Einrichtung im Browser
 
-1. `https://wahl.htl1-klu.at/admin` öffnen. Anmelden mit Benutzer **`admin`** und dem Startpasswort.
-2. **Mein Konto → Passwort ändern.** Ein persönliches, langes Passwort wählen (mind. 10 Zeichen; mehrere Wörter hintereinander merkt man sich leicht).
-3. **Einstellungen** (nur Administratoren):
-   - Schulname und Logo,
-   - **Adresse im QR-Code** = `https://wahl.htl1-klu.at` (genau die Adresse, unter der die Schüler die Wahl erreichen; wird auf die Code-Zettel gedruckt).
+1. `https://wahl.htl1-klu.at/admin` öffnen. Bei einer frischen Installation führt das automatisch zur **Ersteinrichtung**.
+2. Den **Einrichtungscode** eingeben (steht am Ende von `setup.sh`; später erneut anzeigen mit `docker compose exec app python -m app.manage setup-code`
+   oder `docker compose logs app | grep EINRICHTUNGSCODE`). Er schützt davor, dass die Einrichtung jemand anderes vor dir abschließt – öffne die Seite deshalb gleich nach dem Start.
+3. Auf derselben Seite festlegen: **Administrator-Passwort** (Benutzername `admin`, mind. 10 Zeichen; mehrere Wörter hintereinander merkt man sich leicht),
+   **Name der Schule** und **Adresse der Wahlseite** (genau die Adresse, unter der die Schüler die Wahl erreichen, z. B. `https://wahl.htl1-klu.at`; kommt in die QR-Codes).
+   Alles davon lässt sich später im Backoffice ändern (*Einstellungen*, *Mein Konto*). Danach ist man angemeldet, der Code ist verbraucht.
+   - Unter **Einstellungen** außerdem das **Logo** hochladen (weiße Variante auf transparentem Hintergrund, passt zur dunkelblauen Kopfzeile).
 4. **Benutzer:** für jede Lehrkraft, die die Wahl durchführt, einen **Wahlleiter**-Zugang anlegen. Das System erzeugt ein Einmal-Passwort, das persönlich
    weitergegeben wird; beim ersten Login muss die Person ein eigenes Passwort wählen. Vergisst jemand sein Passwort: Admin → *Benutzer → Passwort zurücksetzen*.
 5. **Protokoll** zeigt, wer wann was getan hat (Anmeldungen, Codes erzeugt, Wahl gestartet/beendet …).
@@ -200,6 +204,7 @@ docker compose ps            # alles "healthy"?
 | Kein Zertifikat (Variante A) | `docker compose logs caddy`; DNS prüfen (`dig +short wahl.htl1-klu.at`), Ports 80/443 erreichbar? |
 | „Zu viele Fehlversuche“ bei vielen Schülern | Sperre pro IP ist großzügig (300/5 min). Bei Variante B prüfen, dass der Proxy `X-Forwarded-For $remote_addr` setzt und `TRUST_PROXY=1` gesetzt ist – sonst teilen sich *alle* die Proxy-IP |
 | Admin-Passwort vergessen | `docker compose exec app python -m app.manage reset-password admin` → neues Zufallspasswort (muss beim Login geändert werden) |
+| Einrichtungscode verloren | `docker compose exec app python -m app.manage setup-code` (solange die Ersteinrichtung nicht abgeschlossen ist) |
 | Wahlleiter-Passwort vergessen | Admin: *Benutzer → Passwort zurücksetzen* |
 | Seiten langsam bei Massenzugriff | `WEB_CONCURRENCY` in der `.env` auf die Zahl der CPU-Kerne setzen (z. B. 4), `docker compose up -d`; Wähler klassenweise staffeln (siehe `docs/BETRIEB.md`) |
 | Logs ansehen | `docker compose logs app --tail 100` (Zugriffe werden absichtlich nicht protokolliert) |

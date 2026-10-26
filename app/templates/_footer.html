@@ -1,0 +1,35 @@
+<footer class="footer">
+  <div class="footer-in">
+    <div>
+      <div class="fbrand">{% if logo_url %}<img src="{{ logo_url }}" alt="">{% endif %}<span>{{ school_name }}</span></div>
+      <p>Plattform für die Schulsprecher- und Abteilungssprecherwahl der HTL 1 Lastenstraße. Wahl, Auswertung und Archiv an einem Ort – geheim und nachvollziehbar.</p>
+    </div>
+    <div>
+      <h4>Über uns</h4>
+      <ul>
+        <li><a href="https://htl1-klagenfurt.at" rel="noopener">Schulwebsite</a></li>
+        <li><a href="https://htl1-klagenfurt.at/kontakt/" rel="noopener">Kontakt</a></li>
+        <li><a href="https://htl1-klagenfurt.at/impressum" rel="noopener">Impressum</a></li>
+        <li><a href="https://htl1-klagenfurt.at/datenschutz/" rel="noopener">Datenschutz</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Services</h4>
+      <ul>
+        <li><a href="/">Zur Wahl</a></li>
+        <li><a href="/vergangene">Vergangene Wahlen</a></li>
+        <li><a href="/admin/login">Backoffice</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4>Kontakt</h4>
+      <p>Lastenstraße 1<br>9020 Klagenfurt am Wörthersee</p>
+      <p><a href="tel:+4346356224">+43 463 56224</a></p>
+      <p><a href="mailto:office@htl1-klagenfurt.at">office@htl1-klagenfurt.at</a></p>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© {{ year() }} HTL 1 Lastenstraße. Alle Rechte vorbehalten.</span>
+    <span>Designed by Patrick</span>
+  </div>
+</footer>
