@@ -39,6 +39,7 @@ templates.env.globals["year"] = lambda: datetime.now(config.TZ).year
 
 
 def render(request: Request, name: str, status_code: int = 200, **ctx):
+    """Rendert eine Vorlage mit den gemeinsamen Angaben (Schulname, Logo, Meldungen, angemeldeter Benutzer); Seiten sind nie zwischenspeicherbar."""
     flashes = request.session.pop("flashes", []) if "flashes" in request.session else []
     cfg = settings.get()
     ctx.update(school_name=cfg["school_name"], flashes=flashes, user=getattr(request.state, "user", None),
@@ -49,4 +50,5 @@ def render(request: Request, name: str, status_code: int = 200, **ctx):
 
 
 def flash(request: Request, message: str, kind: str = "ok") -> None:
+    """Merkt eine Meldung für die nächste angezeigte Seite (steht in der Sitzung)."""
     request.session.setdefault("flashes", []).append({"kind": kind, "text": message})

@@ -2,10 +2,10 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from .db import get_db
-from .security import client_ip, code_limiter, public_form
-from .services import VoteError, ballot_for, cast_vote, lookup_code, parse_choices, election_status
-from .web import render
+from ..db import get_db
+from ..security import client_ip, code_limiter, public_form
+from ..services import VoteError, ballot_for, cast_vote, lookup_code, parse_choices
+from ..web import render
 
 router = APIRouter()
 
@@ -13,10 +13,12 @@ ERROR_STATUS = {"notfound": 400, "used": 400, "closed": 403, "notstarted": 403, 
 
 
 def _entry_error(request: Request, err: VoteError, code: str = ""):
+    """Zeigt die Code-Eingabe mit Fehlermeldung (Statuscode je nach Fehlerart)."""
     return render(request, "index.html", ERROR_STATUS.get(err.kind, 400), error=err.message, code=code)
 
 
 def _check_rate(request: Request):
+    """Sperre pro IP nach zu vielen falschen Codes; liefert die Fehlerseite, wenn gesperrt, sonst None."""
     wait = code_limiter.retry_after(client_ip(request))
     if wait:
         return render(request, "index.html", 429,
@@ -27,16 +29,19 @@ def _check_rate(request: Request):
 
 @router.get("/")
 def index(request: Request):
+    """Startseite der Schüler/innen: Code eingeben."""
     return render(request, "index.html", error=None, code="")
 
 
 @router.get("/c/{code}")
 def index_with_code(request: Request, code: str):
     # Der Link aus dem QR-Code füllt nur das Feld aus. Es wird nichts verbraucht.
+    """Ziel des QR-Links: füllt nur das Code-Feld aus, verbraucht nichts."""
     return render(request, "index.html", error=None, code=code[:12])
 
 
 def _open_ballot(request, db, raw_code, prefill=None, error=None):
+    """Prüft Code und Wahlstatus und zeigt den Stimmzettel (Kandidaten in zufälliger Reihenfolge)."""
     blocked = _check_rate(request)
     if blocked:
         return blocked
@@ -55,12 +60,14 @@ def _open_ballot(request, db, raw_code, prefill=None, error=None):
 
 @router.post("/vote/start")
 def start(request: Request, form=Depends(public_form), db: Session = Depends(get_db)):
+    """Schritt 1: Code prüfen, Stimmzettel anzeigen. Speichert nichts."""
     prefill = {k: v for k, v in form.items() if k.startswith("race_")}
     return _open_ballot(request, db, form.get("code"), prefill)
 
 
 @router.post("/vote/review")
 def review(request: Request, form=Depends(public_form), db: Session = Depends(get_db)):
+    """Schritt 2: Auswahl prüfen und Zusammenfassung zeigen. Speichert nichts."""
     blocked = _check_rate(request)
     if blocked:
         return blocked
@@ -88,6 +95,7 @@ def review(request: Request, form=Depends(public_form), db: Session = Depends(ge
 
 @router.post("/vote/submit")
 def submit(request: Request, form=Depends(public_form), db: Session = Depends(get_db)):
+    """Schritt 3: Stimmen verbindlich abgeben (Code atomar verbrauchen, Stimmen in die Urne)."""
     blocked = _check_rate(request)
     if blocked:
         return blocked

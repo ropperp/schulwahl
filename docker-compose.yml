@@ -28,7 +28,7 @@ services:
       POSTGRES_DB: schulwahl
       POSTGRES_USER: schulwahl
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Bitte ADMIN_PASSWORD in der .env setzen}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}  # optional (Tests/automatische Installation); sonst Ersteinrichtung im Browser
       SECRET_KEY: ${SECRET_KEY:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       SCHOOL_NAME: ${SCHOOL_NAME:-Unsere Schule}
