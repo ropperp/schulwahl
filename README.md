@@ -20,6 +20,12 @@ datensparsam und mit geschütztem Wahlgeheimnis. Gebaut für eine HTL mit ca. 10
 - **Kandidaten-Export/-Import:** Wahlgänge samt Kandidat/innen und Fotos als Datei sichern und in eine neue Wahl wieder einspielen (praktisch für Testläufe und das nächste Jahr).
 - **Wahlgeheimnis:** Stimmen sind nicht mit Codes verknüpft – auch nicht über Datenbank-Interna (Urne, siehe [Sicherheit](docs/SICHERHEIT.md)).
 
+## Aussehen
+
+Die Oberfläche folgt den Designrichtlinien der HTL 1 (Dunkelblau/Hellblau, Abteilungsfarben, Bahnschrift bzw. freie Ersatzschrift Barlow, Roadgeek für Überschriften), mit Hell/Dunkel-Umschalter und Schul-Footer.
+Das **Schullogo** wird im Backoffice unter *Einstellungen* hochgeladen – am besten die weiße Variante auf transparentem Grund (die Kopfzeile ist dunkelblau); in gedruckten PDFs erscheint es automatisch schwarzweiß.
+Code-Zettel und Wahlprotokoll sind zum Tonersparen reines Schwarz auf Weiß. Die Schönschrift *Morsal* wird nicht mitgeliefert (Lizenz) und nur genutzt, wenn sie auf dem Gerät installiert ist.
+
 ## Schnellstart
 
 ```bash

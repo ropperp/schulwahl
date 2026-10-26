@@ -23,7 +23,7 @@
 {% for r in races %}
 <section class="card">
   <div class="row between wrap">
-    <h2>{{ r.title }} <span class="tag">{{ r.department.name if r.department else 'alle Abteilungen' }}</span></h2>
+    <h2>{{ r.title }} <span class="tag {{ r.department.name|dept_class if r.department }}">{{ r.department.name if r.department else 'alle Abteilungen' }}</span></h2>
     {% if status == 'planned' %}
     <div class="row gap">
       <form method="post" action="/admin/races/{{ r.id }}/move" class="inline"><input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><input type="hidden" name="dir" value="up"><button class="btn small" title="nach oben" {{ 'disabled' if loop.first }}>↑</button></form>

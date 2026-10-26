@@ -52,6 +52,12 @@ tests/                 test_voting, test_ballot_box, test_accounts, test_securit
 - `services.runoff_advice()` liefert nur die **Empfehlung** (mehr als 2 Kandidat/innen ohne >50 % oder Gleichstand) und den `plan` (Kandidat/innen einer Stichwahl: Gleichstand Platz 1 / Top 2 inkl. Gleichplatzierte / Gleichstand Platz 2 = `deputy`). Die Entscheidung trifft nie das System.
 - Veröffentlichen verlangt, dass jeder Wahlgang entschieden ist. „Stichwahl anlegen“ nur bei `yes`; `runoff-all` fasst alle `yes`-Wahlgänge in EINER neuen Wahl zusammen (`_build_runoff`; Abteilungs-Wahlgänge an ihre Abteilung gebunden, Abteilungen ohne Stichwahl entfallen). Platz 2 ist immer Stellvertretung (`decide()`).
 
+## Design (HTL-1-Designrichtlinien)
+- Farben: Dunkelblau `#002f45` (Kopf/Footer/dunkler Grund), Hellblau `#0088ad` (Akzent); Abteilungen `.dept-mb/et/me/lu` (`#004e8c`, `#d2232a`, `#007a8b`, `#19682d`) über den Jinja-Filter `dept_class` (`web.py`). Tokens als CSS-Variablen in `static/style.css`, Hell/Dunkel über `data-theme` + `prefers-color-scheme`.
+- Schriften: Fließtext `Bahnschrift` (nur `local`, Microsoft-Lizenz verbietet Auslieferung) → `Barlow` (OFL, in `static/fonts/`); Überschriften/Fett `Roadgeek 2005 Mittelschrift` (Lizenztext liegt bei); Schönschrift `Morsal` nur wenn auf dem Gerät installiert (nicht lizenziert, nicht im Repo). **Keine Schriften von CDNs.**
+- `static/theme.js` wird **synchron im `<head>`** geladen (kein Aufblitzen) und speichert die Wahl in `localStorage` (kein Cookie!). Kopf `base.html`, Footer `_footer.html` (Daten der HTL 1 fest eingetragen), Backoffice-Menü per `<details>` in `admin_base.html`.
+- Gedruckte PDFs: **nur Schwarz auf Weiß** (Toner sparen); Logos über `pdfs.logo_for_print` (weißes Logo wird schwarze Silhouette). Test: `tests/test_design.py`.
+
 ## Benutzer, Rollen, Sitzungen
 - Tabelle `users` (Rollen `admin`, `wahlleiter`), `must_change` (Einmal-Passwort), `session_version` (Passwortänderung/Logout entwertet alle Sitzungen). Erster Start: Benutzer `admin` mit `ADMIN_PASSWORD`.
 - **Jede neue Route unter `/admin` braucht `require_staff`/`require_admin` bzw. `staff_form`/`admin_form`.** `tests/test_security.py` prüft automatisch alle Routen (Login, CSRF, Rollen) und schlägt sonst fehl.

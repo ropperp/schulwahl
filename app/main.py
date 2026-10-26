@@ -1,3 +1,4 @@
+import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -16,6 +17,10 @@ from .routes_public import router as public_router
 from .routes_vote import router as vote_router
 from .security import LoginRequired, PasswordChangeRequired
 from .web import render
+
+
+# Die schlanke Docker-Umgebung kennt .woff2 nicht: sonst käme application/octet-stream
+mimetypes.add_type("font/woff2", ".woff2")
 
 
 @asynccontextmanager

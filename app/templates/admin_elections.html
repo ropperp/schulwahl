@@ -1,7 +1,7 @@
 {% extends "admin_base.html" %}
 {% block title %}Wahlen{% endblock %}
 {% block content %}
-<div class="row between"><h1>Wahlen</h1><a class="btn primary" href="/admin/elections/new">+ Neue Wahl</a></div>
+<div class="row between pagehead"><h1>Wahlen</h1><a class="btn primary" href="/admin/elections/new">+ Neue Wahl</a></div>
 {% if not elections %}<section class="card"><p>Noch keine Wahl angelegt.</p></section>{% endif %}
 {% for e in elections %}
 {% set s = status_of(e) %}

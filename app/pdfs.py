@@ -15,6 +15,24 @@ from xml.sax.saxutils import escape
 from .timeutil import fmt_local, utcnow
 
 
+def logo_for_print(data: bytes) -> bytes:
+    """Logo tonersparend: Graustufen auf Weiß. Ein helles Logo für dunklen Grund (weiß auf transparent) wäre auf Papier
+    unsichtbar und wird deshalb als schwarze Silhouette gedruckt."""
+    from PIL import Image as PILImage
+
+    img = PILImage.open(io.BytesIO(data)).convert("RGBA")
+    alpha = img.getchannel("A")
+    page = PILImage.new("RGB", img.size, "white")
+    page.paste(img.convert("RGB"), mask=alpha)
+    gray = page.convert("L")
+    if gray.getextrema()[0] > 225 and alpha.getextrema()[1] > 0:  # praktisch nichts zu sehen
+        gray = PILImage.new("L", img.size, 255)
+        gray.paste(0, mask=alpha)
+    out = io.BytesIO()
+    gray.save(out, "PNG")
+    return out.getvalue()
+
+
 def _fit(text: str, font: str, size: float, max_width: float) -> str:
     """Kürzt Text mit … so, dass er in die Breite passt."""
     from reportlab.pdfbase.pdfmetrics import stringWidth
@@ -24,6 +42,15 @@ def _fit(text: str, font: str, size: float, max_width: float) -> str:
     while text and stringWidth(text + "…", font, size) > max_width:
         text = text[:-1]
     return text + "…"
+
+
+def _fit_size(text: str, font: str, size: float, max_width: float, min_size: float) -> tuple[str, float]:
+    """Verkleinert die Schrift bis min_size, bevor der Text mit … gekürzt wird."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    while size > min_size and stringWidth(text, font, size) > max_width:
+        size = max(min_size, round(size - 0.25, 2))
+    return _fit(text, font, size, max_width), size
 
 
 def _qr(c: canvas.Canvas, url: str, x: float, y: float, size: float) -> None:
@@ -54,18 +81,20 @@ def codes_pdf(election_name: str, items: list[tuple[str, str]], base_url: str) -
         x = margin + (slot % cols) * w
         y = page_h - margin - (slot // cols + 1) * h
 
-        c.setStrokeColor(colors.grey)
-        c.setLineWidth(0.4)
-        c.setDash(1.5, 2)
+        c.setStrokeColor(colors.black)  # tonersparend: nur Schwarz auf Weiß
+        c.setLineWidth(0.3)
+        c.setDash(1.5, 3)
         c.rect(x, y, w, h)
         c.setDash()
 
         text_w = w - qr_size - 3 * pad
         c.setFillColor(colors.black)
-        c.setFont("Helvetica", 7)
-        c.drawString(x + pad, y + h - pad - 6, _fit(election_name, "Helvetica", 7, w - 2 * pad))
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(x + pad, y + h - pad - 18, _fit(dept, "Helvetica-Bold", 9, text_w))
+        title, title_size = _fit_size(election_name, "Helvetica", 7, w - 2 * pad, 5.5)
+        c.setFont("Helvetica", title_size)
+        c.drawString(x + pad, y + h - pad - 6, title)
+        label, label_size = _fit_size(dept, "Helvetica-Bold", 11.5, text_w, 7)  # Abteilung gut lesbar, schrumpft nur bei langen Namen
+        c.setFont("Helvetica-Bold", label_size)
+        c.drawString(x + pad, y + h - pad - 6 - label_size - 3, label)
         c.setFont("Courier-Bold", 17)
         c.drawString(x + pad, y + h / 2 - 12, f"{code[:3]} {code[3:]}")
         c.setFont("Helvetica", 6.5)
@@ -86,6 +115,7 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
     styles = getSampleStyleSheet()
     story = []
     if logo:
+        logo = logo_for_print(logo)
         from reportlab.lib.utils import ImageReader
         from reportlab.platypus import Image as RLImage
         iw, ih = ImageReader(io.BytesIO(logo)).getSize()
@@ -102,8 +132,8 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
         Paragraph("Wahlbeteiligung", styles["Heading2"]),
     ]
     table_style = TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8eaf0")),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.grey),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.2, colors.black),
         ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
     ])
@@ -160,7 +190,7 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
             story.append(Paragraph(f"<b>{escape(line)}</b>", styles["Normal"]))
         if not r["consistent"]:
             story.append(Paragraph(
-                f"<font color='red'>ACHTUNG: {r['total']} Stimmen, aber {r['expected']} verbrauchte Codes.</font>",
+                f"<b>ACHTUNG: {r['total']} Stimmen, aber {r['expected']} verbrauchte Codes.</b>",
                 styles["Normal"]))
         story.append(Spacer(1, 5 * mm))
 
