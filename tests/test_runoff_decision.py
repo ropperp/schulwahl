@@ -239,3 +239,119 @@ def test_existing_database_gets_the_new_column(db):
     assert "runoff_decision" in {c["name"] for c in inspect(dbmod.engine).get_columns("races")}
     with dbmod.SessionLocal() as s:
         assert s.get(Race, race.id).runoff_decision == ""
+
+
+# ------------------------------------------------------------ gemeinsame Stichwahl
+
+def multi_election(db):
+    """Beendete Wahl mit 3 Abteilungen: Schulsprecher (4 Kandidaten, keine Mehrheit) + je ein Abteilungssprecher (je 3 Kandidaten, keine Mehrheit)."""
+    e = Election(name="Hauptwahl", start_at=utcnow() - timedelta(days=2), end_at=utcnow() - timedelta(days=1))
+    e.departments = [Department(name="ET"), Department(name="ME"), Department(name="MB")]
+    db.add(e)
+    db.flush()
+    races = {}
+
+    def race(key, title, dept, counts):
+        r = Race(election_id=e.id, title=title, department_id=dept.id if dept else None, position=len(races))
+        db.add(r)
+        db.flush()
+        for n, v in counts.items():
+            c = Candidate(race_id=r.id, name=n)
+            db.add(c)
+            db.flush()
+            db.add_all(Vote(id=uuid.uuid4().hex, race_id=r.id, candidate_id=c.id) for _ in range(v))
+        races[key] = r
+
+    by = {d.name: d for d in e.departments}
+    race("school", "Schulsprecher/in", None, {"S1": 90, "S2": 100, "S3": 220, "S4": 260})
+    for key in ("ET", "ME", "MB"):
+        race(key, "Abteilungssprecher/in", by[key], {f"{key}-A": 50, f"{key}-B": 40, f"{key}-C": 30})
+    db.commit()
+    return e, races
+
+
+def ballots(db, new, dept_name):
+    """Welche Wahlgänge sieht jemand mit einem Code dieser Abteilung?"""
+    from app.services import ballot_for, generate_codes
+    new.start_at = utcnow() - timedelta(hours=1)
+    db.commit()
+    dept = next(d for d in new.departments if d.name == dept_name)
+    generate_codes(db, new, dept, 1)
+    from app.models import Code
+    code = db.scalar(select(Code).where(Code.department_id == dept.id))
+    _, races = ballot_for(db, code)
+    return [(r.title, [c.name for c in r.candidates]) for r in races]
+
+
+def run_all(client, db, races, token, yes):
+    for key in races:
+        decide(client, token, races[key], "yes" if key in yes else "no")
+
+
+def test_combined_runoff_school_plus_one_department(client, db):
+    e, races = multi_election(db)
+    token = admin_login(client)
+    run_all(client, db, races, token, yes={"school", "MB"})
+    page = client.get(f"/admin/elections/{e.id}/dashboard").text
+    assert "Alle Stichwahlen in einer Wahl anlegen" in page and "ET, MB, ME" in page
+    assert client.post(f"/admin/elections/{e.id}/runoff-all", data={"csrf_token": token}).status_code == 303
+    new = db.scalars(select(Election).where(Election.id != e.id)).one()
+    assert [d.name for d in new.departments] == ["ET", "MB", "ME"]
+    assert db.scalar(select(func.count()).select_from(Race).where(Race.election_id == new.id)) == 2
+    # ET und ME wählen nur den Schulsprecher, MB zusätzlich den Abteilungssprecher
+    assert ballots(db, new, "ET") == [("Stichwahl Schulsprecher/in", ["S3", "S4"])]
+    assert ballots(db, new, "ME") == [("Stichwahl Schulsprecher/in", ["S3", "S4"])]
+    mb = ballots(db, new, "MB")
+    assert [t for t, _ in mb] == ["Stichwahl Schulsprecher/in", "Stichwahl Abteilungssprecher/in"]
+    assert mb[1][1] == ["MB-A", "MB-B"]
+
+
+def test_combined_runoff_two_departments_leaves_third_out(client, db):
+    e, races = multi_election(db)
+    token = admin_login(client)
+    run_all(client, db, races, token, yes={"ET", "ME"})
+    assert "ET, ME" in client.get(f"/admin/elections/{e.id}/dashboard").text
+    client.post(f"/admin/elections/{e.id}/runoff-all", data={"csrf_token": token})
+    new = db.scalars(select(Election).where(Election.id != e.id)).one()
+    assert sorted(d.name for d in new.departments) == ["ET", "ME"]   # MB gibt es gar nicht
+    assert ballots(db, new, "ET") == [("Stichwahl Abteilungssprecher/in", ["ET-A", "ET-B"])]
+    assert ballots(db, new, "ME") == [("Stichwahl Abteilungssprecher/in", ["ME-A", "ME-B"])]
+
+
+def test_combined_runoff_needs_a_yes_and_ended_election(client, db, election):
+    token = admin_login(client)
+    # laufende Wahl
+    client.post(f"/admin/elections/{election.id}/runoff-all", data={"csrf_token": token})
+    assert db.scalar(select(func.count()).select_from(Election)) == 1
+    e, races = multi_election(db)
+    run_all(client, db, races, token, yes=set())
+    client.post(f"/admin/elections/{e.id}/runoff-all", data={"csrf_token": token})
+    assert db.scalar(select(func.count()).select_from(Election)) == 2   # nur "election" und "Hauptwahl"
+    assert "Alle Stichwahlen in einer Wahl anlegen" not in client.get(f"/admin/elections/{e.id}/dashboard").text
+
+
+def test_single_department_runoff_is_bound_to_its_department(client, db):
+    e, races = multi_election(db)
+    token = admin_login(client)
+    run_all(client, db, races, token, yes={"ME"})
+    client.post(f"/admin/elections/{e.id}/runoff", data={"csrf_token": token, "race_id": races["ME"].id})
+    new = db.scalars(select(Election).where(Election.id != e.id)).one()
+    assert [d.name for d in new.departments] == ["ME"]
+    assert ballots(db, new, "ME") == [("Stichwahl Abteilungssprecher/in", ["ME-A", "ME-B"])]
+
+
+def test_combined_runoff_ties_for_second_place_and_photos(client, db):
+    e, races = multi_election(db)
+    # Foto am Kandidaten S4 muss in die Stichwahl mitkommen
+    from app.models import Image
+    img = Image(data=b"x", content_type="image/jpeg")
+    db.add(img)
+    db.flush()
+    db.scalar(select(Candidate).where(Candidate.name == "S4")).image_id = img.id
+    db.commit()
+    token = admin_login(client)
+    run_all(client, db, races, token, yes={"school"})
+    client.post(f"/admin/elections/{e.id}/runoff-all", data={"csrf_token": token})
+    new = db.scalars(select(Election).where(Election.id != e.id)).one()
+    s4 = db.scalar(select(Candidate).join(Race).where(Race.election_id == new.id, Candidate.name == "S4"))
+    assert s4.image_id and s4.image_id != img.id
