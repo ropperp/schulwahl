@@ -1,0 +1,14 @@
+{% extends "admin_base.html" %}
+{% block title %}Protokoll{% endblock %}
+{% block content %}
+<h1>Protokoll</h1>
+<section class="card scroll">
+  <p class="muted small">Die letzten 300 Verwaltungsaktionen (Anmeldungen, Passwörter, Codes, Start/Ende …). Wahlinhalte werden nie protokolliert.</p>
+  <table class="plain">
+    <tr><th>Zeit</th><th>Benutzer</th><th>Aktion</th><th>Details</th><th>IP</th></tr>
+    {% for a in entries %}
+    <tr><td>{{ a.at|local }}</td><td>{{ a.username or '–' }}</td><td>{{ a.action }}</td><td>{{ a.detail }}</td><td class="muted small">{{ a.ip }}</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}

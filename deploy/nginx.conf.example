@@ -1,0 +1,28 @@
+# Vorlage für einen vorhandenen NGINX-Reverse-Proxy der Schule (Variante B in docs/INSTALLATION.md).
+# Ersetze wahl.htl1-klu.at und die Adresse der App. HTTPS-Zertifikat z. B. mit:  sudo certbot --nginx -d wahl.htl1-klu.at
+
+limit_req_zone $binary_remote_addr zone=schulwahl:10m rate=20r/s;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name wahl.htl1-klu.at;
+
+    client_max_body_size 9m;          # Logo-/Foto-Upload (App erlaubt max. 5 MB pro Bild)
+    server_tokens off;
+    gzip on;
+    gzip_types text/css application/javascript image/svg+xml;
+
+    location / {
+        limit_req zone=schulwahl burst=200 nodelay;   # großzügig: im Schul-WLAN teilen sich viele Handys eine IP
+        proxy_pass http://127.0.0.1:8080;             # Adresse/Port der App (APP_BIND/PORT in der .env)
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $remote_addr;   # WICHTIG: ersetzen, NICHT $proxy_add_x_forwarded_for (sonst fälschbar)
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 60s;
+    }
+}
+# Nach "certbot --nginx" kommen HTTPS-Block und Weiterleitung automatisch dazu.
+# In der .env der App:  TRUST_PROXY=1   COOKIE_SECURE=1   PUBLIC_URL='https://wahl.htl1-klu.at'

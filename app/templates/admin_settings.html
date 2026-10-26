@@ -9,6 +9,10 @@
     <label for="school_name">Schulname</label>
     <input id="school_name" name="school_name" value="{{ cfg.school_name }}" maxlength="100" required>
 
+    <label for="public_url">Adresse im QR-Code (Link der Wahl)</label>
+    <input id="public_url" name="public_url" value="{{ qr_url }}" maxlength="200" inputmode="url" autocapitalize="none" required>
+    <p class="muted small">Unter dieser Adresse erreichen die Schüler/innen die Wahl, z. B. <code>https://wahl.htl1-klu.at</code>. Sie wird in alle <em>neu</em> erzeugten Code-Zettel geschrieben. Bereits gedruckte Zettel behalten ihre alte Adresse – deshalb vor dem Drucken prüfen!</p>
+
     <label for="logo">Schullogo</label>
     {% if cfg.logo_id %}<p><img class="logo-preview" src="/media/logo?v={{ cfg.logo_id }}" alt="Aktuelles Logo"></p>{% endif %}
     <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">

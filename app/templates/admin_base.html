@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% block home %}/admin{% endblock %}
 {% block nav %}
-  {% if request.session.get('admin') %}
+  {% if user %}
   <a href="/admin">Wahlen</a>
+  {% if user.role == 'admin' %}
   <a href="/admin/settings">Einstellungen</a>
+  <a href="/admin/users">Benutzer</a>
+  <a href="/admin/audit">Protokoll</a>
+  {% endif %}
+  <a href="/admin/account" title="{{ ROLE_LABEL[user.role] }}">Mein Konto ({{ user.username }})</a>
   <form method="post" action="/admin/logout" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
     <button class="linkbtn" type="submit">Abmelden</button>

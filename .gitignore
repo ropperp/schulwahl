@@ -6,3 +6,6 @@ __pycache__/
 venv/
 *.db
 caddy/Caddyfile
+backups/
+.env.*
+!.env.example

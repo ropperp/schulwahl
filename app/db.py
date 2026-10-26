@@ -24,8 +24,12 @@ def init_db(retries: int = 30) -> None:
     """Tabellen anlegen; wartet kurz, falls die Datenbank noch hochfährt."""
     for attempt in range(retries):
         try:
-            Base.metadata.create_all(engine)
-            _migrate()
+            with engine.begin() as conn:
+                if conn.dialect.name == "postgresql":
+                    # Mehrere Worker starten gleichzeitig: nur einer legt Tabellen an, die anderen warten.
+                    conn.execute(text("SELECT pg_advisory_xact_lock(727274)"))
+                Base.metadata.create_all(conn)
+                _migrate(conn)
             return
         except OperationalError:
             if attempt == retries - 1:
@@ -41,10 +45,9 @@ _NEW_COLUMNS = [
 ]
 
 
-def _migrate() -> None:
+def _migrate(conn) -> None:
     """Ergänzt Spalten, die in älteren Versionen noch fehlten (create_all ändert keine bestehenden Tabellen)."""
-    insp = inspect(engine)
+    insp = inspect(conn)
     for table, column, ddl in _NEW_COLUMNS:
         if column not in {c["name"] for c in insp.get_columns(table)}:
-            with engine.begin() as conn:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+            conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))

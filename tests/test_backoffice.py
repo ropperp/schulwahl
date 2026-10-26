@@ -64,7 +64,7 @@ def test_candidate_with_photo_edit_delete(client, db, election):
     cand = db.scalar(select(Candidate).where(Candidate.name == "Neu"))
     assert cand.image_id
     photo = client.get(f"/media/candidate/{cand.id}")
-    assert photo.status_code == 200 and PILImage.open(io.BytesIO(photo.content)).size == (400, 400)
+    assert photo.status_code == 200 and PILImage.open(io.BytesIO(photo.content)).size == (240, 240)
 
     # Seite zeigt Foto, Stimmzettel ebenfalls
     assert f"/media/candidate/{cand.id}" in client.get(f"/admin/elections/{election.id}/candidates").text

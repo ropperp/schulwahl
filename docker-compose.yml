@@ -2,6 +2,8 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     environment:
       POSTGRES_DB: schulwahl
       POSTGRES_USER: schulwahl
@@ -33,6 +35,16 @@ services:
       TZ: ${TZ:-Europe/Vienna}
       TRUST_PROXY: ${TRUST_PROXY:-0}
       COOKIE_SECURE: ${COOKIE_SECURE:-0}
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-2}
+    # Härtung: unveränderliches Dateisystem, keine Zusatzrechte
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 200
     ports:
       # Im HTTPS-Betrieb setzt setup.sh APP_BIND=127.0.0.1, dann ist nur Caddy von außen erreichbar.
       - "${APP_BIND:-0.0.0.0}:${PORT:-8080}:8000"
@@ -42,6 +54,8 @@ services:
     image: caddy:2-alpine
     profiles: ["https"]
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - app
     ports:
