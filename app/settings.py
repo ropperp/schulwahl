@@ -24,8 +24,10 @@ def get() -> dict:
         with SessionLocal() as db:
             rows = {s.key: s.value for s in db.query(Setting).all()}
         logo = rows.get("logo_image_id", "")
+        protocol_logo = rows.get("protocol_logo_image_id", "")
         _cache = {"school_name": rows.get("school_name") or config.SCHOOL_NAME,
                   "logo_id": int(logo) if logo.isdigit() else None,
+                  "protocol_logo_id": int(protocol_logo) if protocol_logo.isdigit() else None,
                   "public_url": rows.get("public_url") or config.PUBLIC_URL}
         _loaded_at = time.monotonic()
     return _cache
@@ -76,15 +78,16 @@ def _set(db: Session, key: str, value: str) -> None:
 
 
 def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, remove_logo: bool = False,
-         public_url: str | None = None) -> None:
-    """Speichert Schulname, optional Logo und QR-Adresse und committet (auch andere offene Änderungen derselben Sitzung)."""
-    current = get()["logo_id"]
+         public_url: str | None = None, protocol_logo: tuple[bytes, str] | None = None,
+         remove_protocol_logo: bool = False) -> None:
+    """Speichert Schulname, optional Logo(s) und QR-Adresse und committet (auch andere offene Änderungen derselben Sitzung)."""
+    cfg = get()
     _set(db, "school_name", school_name)
     if public_url is not None:
         _set(db, "public_url", public_url)
     if logo or remove_logo:
-        if current:
-            db.query(Image).filter(Image.id == current).delete()
+        if cfg["logo_id"]:
+            db.query(Image).filter(Image.id == cfg["logo_id"]).delete()
         if logo:
             img = Image(data=logo[0], content_type=logo[1])
             db.add(img)
@@ -92,5 +95,15 @@ def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, r
             _set(db, "logo_image_id", str(img.id))
         else:
             _set(db, "logo_image_id", "")
+    if protocol_logo or remove_protocol_logo:
+        if cfg["protocol_logo_id"]:
+            db.query(Image).filter(Image.id == cfg["protocol_logo_id"]).delete()
+        if protocol_logo:
+            img = Image(data=protocol_logo[0], content_type=protocol_logo[1])
+            db.add(img)
+            db.flush()
+            _set(db, "protocol_logo_image_id", str(img.id))
+        else:
+            _set(db, "protocol_logo_image_id", "")
     db.commit()
     invalidate()
