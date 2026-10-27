@@ -36,7 +36,9 @@ def candidates_page(request: Request, election_id: int, db: Session = Depends(ge
         .options(selectinload(Race.candidates), selectinload(Race.department))
         .order_by(Race.position, Race.id)
     ).all()
-    return render(request, "admin_candidates.html", e=e, races=races, status=election_status(e), tab="candidates")
+    status = election_status(e)
+    editable = status == "planned" or (e.source == "manual" and not e.results_public)
+    return render(request, "admin_candidates.html", e=e, races=races, status=status, editable=editable, tab="candidates")
 
 
 @router.post("/elections/{election_id}/races")

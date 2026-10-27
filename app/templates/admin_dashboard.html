@@ -22,7 +22,9 @@
   {% if status == 'running' %}<p class="muted small">Diese Seite aktualisiert sich alle 10 Sekunden. Ergebnisse werden erst nach Ende der Wahl angezeigt.</p>{% endif %}
 </section>
 
+{% if e.source != 'manual' %}
 {{ participation_block(part) }}
+{% endif %}
 
 {% if combined|length > 1 and not e.results_public %}
 <section class="card">

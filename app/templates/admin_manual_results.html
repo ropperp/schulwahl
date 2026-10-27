@@ -1,0 +1,46 @@
+{% extends "admin_base.html" %}
+{% block title %}Ergebnisse eintragen · {{ e.name }}{% endblock %}
+{% block content %}
+{% include "_election_nav.html" %}
+
+{% if e.results_public %}
+<div class="alert error">🔒 Das Ergebnis ist veröffentlicht. Zum Ändern zuerst die Veröffentlichung zurücknehmen.</div>
+{% else %}
+<section class="card">
+  <p class="muted small">Hier trägst du die Endergebnisse einer bereits analog durchgeführten Wahl ein - z. B. die erste Runde,
+    bevor jetzt eine digitale Stichwahl folgt. Es gibt keine Codes; die Zahlen werden direkt als Stimmen gespeichert.</p>
+</section>
+{% endif %}
+
+{% if not races %}
+<section class="card"><p class="muted">Noch keine Wahlgänge. Zuerst unter „Kandidat/innen“ Wahlgänge und Kandidat/innen anlegen.</p></section>
+{% else %}
+<form method="post" action="/admin/elections/{{ e.id }}/manual-results">
+  <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+  {% for r in races %}
+  <section class="card">
+    <h2>{{ r.title }}{% if r.department %} <span class="tag {{ r.department.name|dept_class }}">{{ r.department.name }}</span>{% endif %}</h2>
+    {% if not r.candidates %}
+    <p class="muted">Noch keine Kandidat/innen in diesem Wahlgang.</p>
+    {% else %}
+    <table class="bars">
+      {% for c in r.candidates %}
+      <tr>
+        <td class="name">{% if c.image_id %}<img class="avatar sm" src="/media/candidate/{{ c.id }}" alt="">{% endif %}{{ c.name }}</td>
+        <td class="num"><input type="number" class="votecount" min="0" max="5000" name="votes_{{ c.id }}" value="{{ counts[r.id][c.id] }}"
+                               {{ 'disabled' if e.results_public }}></td>
+      </tr>
+      {% endfor %}
+      <tr class="inv">
+        <td class="name">Ungültig</td>
+        <td class="num"><input type="number" class="votecount" min="0" max="5000" name="invalid_{{ r.id }}" value="{{ invalid[r.id] }}"
+                               {{ 'disabled' if e.results_public }}></td>
+      </tr>
+    </table>
+    {% endif %}
+  </section>
+  {% endfor %}
+  {% if not e.results_public %}<button class="btn primary big" type="submit">Ergebnisse speichern</button>{% endif %}
+</form>
+{% endif %}
+{% endblock %}

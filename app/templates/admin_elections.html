@@ -8,7 +8,7 @@
 <section class="card">
   <div class="row between">
     <div>
-      <h2><a href="/admin/elections/{{ e.id }}">{{ e.name }}</a></h2>
+      <h2><a href="/admin/elections/{{ e.id }}">{{ e.name }}</a>{% if e.source == 'manual' %} <span class="tag">nachgetragen</span>{% endif %}</h2>
       <p class="muted">{{ e.start_at|local }} bis {{ e.end_at|local }} Uhr</p>
     </div>
     <span class="badge {{ s }}">{{ STATUS_LABEL[s] }}</span>

@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session, selectinload
 from .. import candidate_io
 from .. import settings as app_settings
 from ..db import get_db
-from ..models import Candidate, Department, Election, Image, Race
+from ..models import Candidate, Department, Election, Image, Race, Vote
 from ..pdfs import protocol_pdf
 from ..security import admin_form, audit, require_staff, staff_form
 from ..services import (STATUS_LABEL, compute_results, delete_election, election_status, name_problem, participation,
-                        short_name)
+                        set_manual_results, short_name)
 from ..timeutil import parse_local, utcnow
 from ..web import flash, render
 from .common import (get_election, go, not_found, read_import_file, store_image)
@@ -72,7 +72,8 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
         return render(request, "admin_new.html", 400, error=error, start=form.get("start_at", ""),
                       end=form.get("end_at", ""))
 
-    e = Election(name=name, start_at=start, end_at=end,
+    source = "manual" if form.get("source") == "manual" else "live"
+    e = Election(name=name, start_at=start, end_at=end, source=source,
                  code_mode="class" if form.get("code_mode") == "class" else "department")
     e.departments = [Department(name=n) for n in dept_names]
     db.add(e)
@@ -86,8 +87,13 @@ def create(request: Request, form=Depends(staff_form), db: Session = Depends(get
         stats = candidate_io.apply(db, e, parsed)
         audit(db, request, "candidates_imported", f"{e.name}: {stats['candidates']}")
     db.commit()
-    flash(request, "Wahl angelegt. " + (candidate_io.summary(stats) + " Als Nächstes die Codes erzeugen." if parsed
-                                        else "Als Nächstes die Kandidat/innen eintragen und Codes erzeugen."))
+    if source == "manual":
+        flash(request, "Wahl angelegt. " + (candidate_io.summary(stats) + " " if parsed else "") +
+                       "Als Nächstes die Kandidat/innen eintragen (falls noch nicht geschehen) und im Reiter "
+                       "„Ergebnisse eintragen“ die Endergebnisse erfassen.")
+    else:
+        flash(request, "Wahl angelegt. " + (candidate_io.summary(stats) + " Als Nächstes die Codes erzeugen." if parsed
+                                            else "Als Nächstes die Kandidat/innen eintragen und Codes erzeugen."))
     return go(f"/admin/elections/{e.id}")
 
 
@@ -100,11 +106,20 @@ def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=
         .order_by(Race.position, Race.id)
     ).all()
     part = participation(db, e)
-    checks = [
-        ("Wahlgänge angelegt", bool(races)),
-        ("Jeder Wahlgang hat Kandidat/innen", bool(races) and all(r.candidates for r in races)),
-        ("Für jede Abteilung wurden Codes erzeugt", all(d["total"] > 0 for d in part["departments"])),
-    ]
+    if e.source == "manual":
+        has_votes = bool(races) and db.scalar(
+            select(func.count()).select_from(Vote).where(Vote.race_id.in_([r.id for r in races]))) > 0
+        checks = [
+            ("Wahlgänge angelegt", bool(races)),
+            ("Jeder Wahlgang hat Kandidat/innen", bool(races) and all(r.candidates for r in races)),
+            ("Endergebnisse eingetragen", has_votes),
+        ]
+    else:
+        checks = [
+            ("Wahlgänge angelegt", bool(races)),
+            ("Jeder Wahlgang hat Kandidat/innen", bool(races) and all(r.candidates for r in races)),
+            ("Für jede Abteilung wurden Codes erzeugt", all(d["total"] > 0 for d in part["departments"])),
+        ]
     return render(request, "admin_election.html", e=e, status=election_status(e), part=part, checks=checks, tab="overview")
 
 
@@ -112,7 +127,7 @@ def detail(request: Request, election_id: int, db: Session = Depends(get_db), _=
 def settings(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
     """Ändert Name und Zeitfenster einer noch nicht beendeten Wahl."""
     e = get_election(db, election_id)
-    if election_status(e) == "ended":
+    if election_status(e) == "ended" and e.source != "manual":
         flash(request, "Eine beendete Wahl kann nicht mehr geändert werden.", "error")
         return go(f"/admin/elections/{e.id}")
     try:
@@ -126,7 +141,7 @@ def settings(request: Request, election_id: int, form=Depends(staff_form), db: S
         return go(f"/admin/elections/{e.id}")
     if end <= start:
         flash(request, "Das Ende muss nach dem Start liegen.", "error")
-    elif end <= utcnow():
+    elif end <= utcnow() and e.source != "manual":
         flash(request, "Das Ende liegt in der Vergangenheit. Zum Beenden den Button „Jetzt beenden“ nutzen.", "error")
     else:
         e.name, e.start_at, e.end_at = name, start, end
@@ -134,6 +149,58 @@ def settings(request: Request, election_id: int, form=Depends(staff_form), db: S
         db.commit()
         flash(request, "Gespeichert.")
     return go(f"/admin/elections/{e.id}")
+
+
+@router.get("/elections/{election_id}/manual-results")
+def manual_results_form(request: Request, election_id: int, db: Session = Depends(get_db), _=Depends(require_staff)):
+    """Formular zum Eintragen der Endergebnisse einer manuell erfassten (bereits analog durchgeführten) Wahl."""
+    e = get_election(db, election_id)
+    if e.source != "manual":
+        raise HTTPException(404, "Nicht gefunden")
+    races = db.scalars(
+        select(Race).where(Race.election_id == e.id)
+        .options(selectinload(Race.candidates), selectinload(Race.department))
+        .order_by(Race.position, Race.id)
+    ).all()
+    counts = {
+        race.id: {c.id: db.scalar(select(func.count()).select_from(Vote)
+                                   .where(Vote.race_id == race.id, Vote.candidate_id == c.id)) for c in race.candidates}
+        for race in races
+    }
+    invalid = {race.id: db.scalar(select(func.count()).select_from(Vote)
+                                   .where(Vote.race_id == race.id, Vote.candidate_id.is_(None))) for race in races}
+    return render(request, "admin_manual_results.html", e=e, races=races, status=election_status(e),
+                 counts=counts, invalid=invalid, tab="manual_results")
+
+
+@router.post("/elections/{election_id}/manual-results")
+def manual_results_save(request: Request, election_id: int, form=Depends(staff_form), db: Session = Depends(get_db)):
+    """Speichert die eingetragenen Endergebnisse (ersetzt bestehende Stimmen je Wahlgang vollständig)."""
+    e = get_election(db, election_id)
+    if e.source != "manual":
+        raise HTTPException(404, "Nicht gefunden")
+    if e.results_public:
+        flash(request, "Das Ergebnis ist veröffentlicht. Zum Ändern zuerst die Veröffentlichung zurücknehmen.", "error")
+        return go(f"/admin/elections/{e.id}/manual-results")
+    races = db.scalars(
+        select(Race).where(Race.election_id == e.id).options(selectinload(Race.candidates))
+    ).all()
+
+    def _num(key: str) -> int:
+        """Liest ein nichtnegatives Zahlenfeld aus dem Formular; ungültige Eingaben werden zu 0."""
+        raw = str(form.get(key, "0")).strip()
+        try:
+            return max(0, int(raw)) if raw else 0
+        except ValueError:
+            return 0
+
+    for race in races:
+        counts = {c.id: _num(f"votes_{c.id}") for c in race.candidates}
+        set_manual_results(db, race, counts, _num(f"invalid_{race.id}"))
+    audit(db, request, "manual_results_saved", e.name)
+    db.commit()
+    flash(request, "Ergebnisse gespeichert.")
+    return go(f"/admin/elections/{e.id}/dashboard")
 
 
 @router.post("/elections/{election_id}/start-now")

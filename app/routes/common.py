@@ -56,7 +56,16 @@ def drop_image(db: Session, image_id: int | None) -> None:
 
 
 def structure_locked(request: Request, e: Election) -> bool:
-    """True (mit Fehlermeldung), wenn die Wahl schon gestartet ist: Wahlgänge/Kandidat/innen sind dann gesperrt."""
+    """True (mit Fehlermeldung), wenn die Wahl schon gestartet ist: Wahlgänge/Kandidat/innen sind dann gesperrt.
+
+    Eine manuell erfasste (bereits analog durchgeführte) Wahl hat keinen Start im eigentlichen Sinn und bleibt
+    bearbeitbar, solange das Ergebnis nicht veröffentlicht ist.
+    """
+    if e.source == "manual":
+        if e.results_public:
+            flash(request, "Das Ergebnis ist veröffentlicht. Zum Ändern zuerst die Veröffentlichung zurücknehmen.", "error")
+            return True
+        return False
     if election_status(e) != "planned":
         flash(request, "Wahlgänge und Kandidat/innen können nach dem Start nicht mehr geändert werden.", "error")
         return True

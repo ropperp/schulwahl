@@ -311,6 +311,7 @@ table.bars tr.sub td { padding-top: 0; font-size: .9rem; color: var(--muted); }
 
 /* Mobil: Datums-/Zeitfelder (Safari/iOS) sprengen sonst die Karte; Rasterspalten dürfen schrumpfen */
 .grid2 > *, .grid3 > *, .grid3b > *, .grid4 > * { min-width: 0; }
+input[type=number].votecount { width: 6rem; text-align: right; }
 input[type=datetime-local], input[type=date], input[type=time] { display: block; min-width: 0; max-width: 100%; -webkit-appearance: none; appearance: none; text-align: left; }
 input[type=datetime-local]::-webkit-date-and-time-value { text-align: left; min-height: 1.2em; }
 .pagehead { margin: .4rem 0 20px; gap: 1rem; }
