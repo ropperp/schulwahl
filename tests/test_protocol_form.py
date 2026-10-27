@@ -110,7 +110,10 @@ def test_pending_runoff_not_shown_as_winner(client, db, election):
     assert f"Als {race.title} wurde gewählt:\n{a.name}" not in text  # kein Gewinner, solange die Stichwahl offen ist
 
 
-def test_origin_deputy_auto_filled_for_speaker_runoff(client, db):
+def test_runoff_protocol_lists_only_the_two_runoff_candidates(client, db):
+    """Stimmenzahlen zweier verschiedener Wahlen (Ursprungswahl/Stichwahl) sind nicht vergleichbar: kein automatischer
+    2. Stellvertreter aus der Ursprungswahl. Die Stichwahl vermerkt nur die zwei Kandidat/innen, zwischen denen sie
+    stattfindet; 3./4. Platz der Ursprungswahl stehen dort unter "Weitere Ergebnisse", nicht auf dem Stichwahl-Protokoll."""
     token = admin_login(client)
     e = Election(name="Schulsprecherwahl", start_at=utcnow() - timedelta(hours=2), end_at=utcnow() - timedelta(hours=1),
                 closed_at=utcnow() - timedelta(hours=1))
@@ -137,7 +140,6 @@ def test_origin_deputy_auto_filled_for_speaker_runoff(client, db):
     runoff_id = int(r.headers["location"].rsplit("/", 1)[-1])
     db.expire_all()
     runoff_race = db.scalar(select(Race).where(Race.election_id == runoff_id))
-    assert runoff_race.origin_race_id == race.id
     runoff_cands = {c.name: c for c in runoff_race.candidates}
     assert set(runoff_cands) == {"Anna", "Ben"}  # Clara/David (3./4. Platz) sind nicht in der Stichwahl
 
@@ -146,14 +148,21 @@ def test_origin_deputy_auto_filled_for_speaker_runoff(client, db):
     runoff_election.end_at = utcnow() - timedelta(hours=1)
     runoff_election.closed_at = utcnow() - timedelta(hours=1)
     db.add(Vote(id=uuid.uuid4().hex, race_id=runoff_race.id, candidate_id=runoff_cands["Anna"].id))
-    for _ in range(2):
+    for _ in range(600):
         db.add(Vote(id=uuid.uuid4().hex, race_id=runoff_race.id, candidate_id=runoff_cands["Ben"].id))
     db.commit()
+
+    # Auf dem Ursprungsprotokoll sind Clara/David schon "Weitere Ergebnisse" (Stichwahl noch offen)
+    r = client.get(f"/admin/elections/{e.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "Weitere Ergebnisse" in text and "Clara" in text and "David" in text
 
     r = client.get(f"/admin/elections/{runoff_id}/protocol-form.pdf")
     assert r.status_code == 200
     text = _pdf_text(r.content)
     if text is None:
         return
-    assert "2. Stellvertreter/in\nName" in text and "Clara" in text  # 3. Platz der Ursprungswahl, nicht durchgestrichen
-    assert "David" not in text.split("2. Stellvertreter/in")[1][:200]
+    assert "2. Stellvertreter/in" in text
+    # trotz nur 1 Stimme hätte "Clara" (ursprünglich 20 Stimmen) hier nichts verloren - keine Vermischung der Wahlen
+    assert "Clara" not in text and "David" not in text

@@ -66,8 +66,6 @@ class Race(Base):
     runoff_kind: Mapped[str] = mapped_column(String(20), default="", server_default="")
     # Entscheidung der Wahlleitung nach Wahlende: "" = offen, "yes" = Stichwahl durchführen, "no" = keine Stichwahl
     runoff_decision: Mapped[str] = mapped_column(String(10), default="", server_default="")
-    # Bei einer Stichwahl: der Wahlgang, aus dem sie entstanden ist (für den/die 2. Stellvertreter/in im Protokoll)
-    origin_race_id: Mapped[int | None] = mapped_column(ForeignKey("races.id"), default=None)
 
     election: Mapped[Election] = relationship(back_populates="races")
     department: Mapped[Department | None] = relationship()

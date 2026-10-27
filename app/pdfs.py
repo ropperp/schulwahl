@@ -238,17 +238,14 @@ def _sign_box(caption: str, box_h: float) -> list:
 
 
 def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
-                          signed_by: str, witnesses: list[str] | None = None,
-                          origin_deputies: dict[int, tuple] | None = None) -> bytes:
+                          signed_by: str, witnesses: list[str] | None = None) -> bytes:
     """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftsfelder.
 
     Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
     Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
-    Massendruck (dafür gibt es weiterhin `protocol_pdf`). `origin_deputies` (Wahlgang-ID -> (Kandidat/in, Stimmen))
-    liefert bei Stichwahlen um Platz 1 die/den 2. Stellvertreter/in aus dem Ursprungs-Wahlgang (siehe `services.origin_runoff_deputy`).
+    Massendruck (dafür gibt es weiterhin `protocol_pdf`).
     """
     witnesses = [w.strip()[:100] for w in (witnesses or []) if w.strip()][:10]
-    origin_deputies = origin_deputies or {}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=16 * mm, bottomMargin=22 * mm, title=f"Wahlprotokoll – {election.name}")
@@ -329,14 +326,8 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             story.append(Paragraph("<strike>1. Stellvertreter/in</strike>", section))
             story.append(mini_table([]))
 
-        origin = origin_deputies.get(race.id)
-        if origin:
-            c, v = origin
-            story.append(Paragraph("2. Stellvertreter/in", section))
-            story.append(mini_table([[c.name, c.info or "", str(v)]]))
-        else:
-            story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # sonst vergibt das System nie einen 2. Platz
-            story.append(mini_table([]))
+        story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # unser System vergibt nie mehr als einen Platz
+        story.append(mini_table([]))
 
         rest = [row for row in r["rows"] if row["votes"] > 0 and row["candidate"].id not in shown_ids]
         if rest:
