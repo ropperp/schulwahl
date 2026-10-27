@@ -343,6 +343,32 @@ def runoff_advice(rows: list[dict], decision: dict, valid: int, runoff_kind: str
     return {"recommend": recommend, "reason": reason, "majority": majority, "plan_kind": plan_kind, "plan": plan}
 
 
+def origin_runoff_deputy(db: Session, race: Race) -> tuple[Candidate, int] | None:
+    """2. Stellvertreter/in einer Platz-1-Stichwahl (`runoff_kind == "speaker"`): die/der nächstplatzierte Kandidat/in
+
+    des Ursprungs-Wahlgangs (`origin_race_id`), außerhalb der Stichwahl-Teilnehmer/innen. Die Stichwahl selbst
+    entscheidet nur Platz 1 und (als deren Verlierer/in) die 1. Stellvertretung; Platz 3 der ursprünglichen Wahl bleibt
+    unverändert 2. Stellvertreter/in. None bei Gleichstand, ohne Ursprungs-Wahlgang oder ohne weitere Stimmen.
+    """
+    if race.runoff_kind != "speaker" or not race.origin_race_id:
+        return None
+    origin = db.scalar(select(Race).where(Race.id == race.origin_race_id).options(selectinload(Race.candidates)))
+    if origin is None:
+        return None
+    # Die Stichwahl-Kandidat/innen sind KOPIEN mit neuen IDs (siehe _build_runoff), daher Abgleich über den Namen.
+    plan_names = {c.name for c in race.candidates}
+    counts = dict(db.execute(
+        select(Vote.candidate_id, func.count(Vote.id)).where(Vote.race_id == origin.id).group_by(Vote.candidate_id)
+    ).all())
+    remaining = [(c, counts.get(c.id, 0)) for c in origin.candidates if c.name not in plan_names]
+    remaining = [(c, v) for c, v in remaining if v > 0]
+    if not remaining:
+        return None
+    top = max(v for _, v in remaining)
+    tied = [c for c, v in remaining if v == top]
+    return (tied[0], top) if len(tied) == 1 else None
+
+
 def compute_results(db: Session, election: Election) -> list[dict]:
     """Zählt alle Wahlgänge einer beendeten Wahl aus (übernimmt zuerst die Urne), inkl. Konsistenzprüfung und Empfehlung zur Stichwahl."""
     flush_ballots(db, election)

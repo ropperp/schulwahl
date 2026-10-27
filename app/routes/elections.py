@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -14,8 +14,8 @@ from ..db import get_db
 from ..models import Candidate, Department, Election, Image, Race, User, Vote
 from ..pdfs import official_protocol_pdf, protocol_pdf
 from ..security import admin_form, audit, require_staff, staff_form
-from ..services import (STATUS_LABEL, compute_results, delete_election, election_status, name_problem, participation,
-                        set_manual_results, short_name)
+from ..services import (STATUS_LABEL, compute_results, delete_election, election_status, name_problem,
+                        origin_runoff_deputy, participation, set_manual_results, short_name)
 from ..timeutil import parse_local, utcnow
 from ..web import flash, render
 from .common import (get_election, go, not_found, read_import_file, store_image)
@@ -302,7 +302,7 @@ def _build_runoff(db: Session, e: Election, results: list[dict], name: str) -> E
         race = result["race"]
         dept_id = new_dept[old_dept[race.department_id].name].id if race.department_id else None
         new_race = Race(election_id=new.id, department_id=dept_id, title=f"Stichwahl {race.title}",
-                        runoff_kind=result["plan_kind"], position=position)
+                        runoff_kind=result["plan_kind"], position=position, origin_race_id=race.id)
         db.add(new_race)
         db.flush()
         for c in result["plan"]:
@@ -421,16 +421,19 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
 
 
 @router.get("/elections/{election_id}/protocol-form.pdf")
-def protocol_form(request: Request, election_id: int, signers: int = 1, db: Session = Depends(get_db),
-                  user: User = Depends(require_staff)):
-    """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftenzeilen); erst nach Wahlende."""
+def protocol_form(request: Request, election_id: int, witnesses: list[str] = Query(default=[]),
+                  db: Session = Depends(get_db), user: User = Depends(require_staff)):
+    """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftsfelder); erst nach Wahlende."""
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:
         return early
     cfg = app_settings.get()
     logo = db.get(Image, cfg["protocol_logo_id"]) if cfg["protocol_logo_id"] else None
-    pdf = official_protocol_pdf(e, compute_results(db, e), cfg["school_name"], logo.data if logo else None,
-                                user.username, extra_signers=max(0, min(6, signers)))
+    results = compute_results(db, e)
+    origin_deputies = {r["race"].id: origin_runoff_deputy(db, r["race"]) for r in results}
+    origin_deputies = {rid: dep for rid, dep in origin_deputies.items() if dep}
+    pdf = official_protocol_pdf(e, results, cfg["school_name"], logo.data if logo else None,
+                                user.full_name or user.username, witnesses=witnesses, origin_deputies=origin_deputies)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="protokoll-papierform-{e.id}.pdf"'})

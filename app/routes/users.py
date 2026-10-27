@@ -32,13 +32,14 @@ def user_create(request: Request, form=Depends(admin_form), db: Session = Depend
     """Legt eine/n Wahlleiter/in oder weitere/n Administrator/in mit Zufalls-Einmalpasswort an; es wird nur jetzt angezeigt."""
     name = normalize_username(str(form.get("username", "")))
     role = ROLE_ADMIN if form.get("role") == ROLE_ADMIN else ROLE_WAHLLEITER
+    full_name = str(form.get("full_name", "")).strip()[:100]
     error = username_problem(name)
     if error is None and db.scalar(select(User.id).where(User.username == name)) is not None:
         error = "Diesen Benutzernamen gibt es schon."
     if error:
         return _users_page(request, db, 400, error=error)
     password = random_password()
-    db.add(User(username=name, role=role, password_hash=hash_password(password), must_change=True))
+    db.add(User(username=name, role=role, full_name=full_name, password_hash=hash_password(password), must_change=True))
     audit(db, request, "user_created", f"{name} ({ROLE_LABEL[role]})")
     db.commit()
     return _users_page(request, db, new_credentials={"username": name, "password": password, "what": "angelegt"})

@@ -228,24 +228,44 @@ def _svg_drawing(svg_bytes: bytes, max_w: float, max_h: float):
     return d
 
 
+def _sign_box(caption: str, box_h: float) -> list:
+    """Inhalt einer Unterschriftsbox: leerer Platz zum Unterschreiben, eine Linie, darunter der Name (schwarz, nicht fett)."""
+    from reportlab.platypus.flowables import HRFlowable
+
+    cap_style = ParagraphStyle("cap", fontName="Helvetica", fontSize=8.5, textColor=colors.black, leading=10)
+    return [Spacer(1, box_h - 13 * mm), HRFlowable(width="100%", thickness=0.7, color=colors.black, spaceAfter=1.5),
+           Paragraph(escape(caption) if caption else "&nbsp;", cap_style)]
+
+
 def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
-                          signed_by: str, extra_signers: int = 1) -> bytes:
-    """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftenzeilen.
+                          signed_by: str, witnesses: list[str] | None = None,
+                          origin_deputies: dict[int, tuple] | None = None) -> bytes:
+    """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftsfelder.
 
     Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
     Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
-    Massendruck (dafür gibt es weiterhin `protocol_pdf`).
+    Massendruck (dafür gibt es weiterhin `protocol_pdf`). `origin_deputies` (Wahlgang-ID -> (Kandidat/in, Stimmen))
+    liefert bei Stichwahlen um Platz 1 die/den 2. Stellvertreter/in aus dem Ursprungs-Wahlgang (siehe `services.origin_runoff_deputy`).
     """
+    witnesses = [w.strip()[:100] for w in (witnesses or []) if w.strip()][:10]
+    origin_deputies = origin_deputies or {}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
-                            topMargin=16 * mm, bottomMargin=16 * mm, title=f"Wahlprotokoll – {election.name}")
+                            topMargin=16 * mm, bottomMargin=22 * mm, title=f"Wahlprotokoll – {election.name}")
     styles = getSampleStyleSheet()
     center = ParagraphStyle("center", parent=styles["Normal"], alignment=1)
     center_bold = ParagraphStyle("center_bold", parent=center, fontName="Helvetica-Bold", fontSize=13, leading=16)
     center_bold_small = ParagraphStyle("center_bold_small", parent=center, fontName="Helvetica-Bold", fontSize=11)
     section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=10,
                              spaceBefore=6, spaceAfter=2)
-    foot_style = ParagraphStyle("foot", parent=styles["Normal"], fontSize=7.5, textColor=colors.black)
+
+    def draw_footer(c, _doc):
+        """Fußzeile fix am unteren Rand jeder Seite (nicht Teil des fließenden Inhalts)."""
+        c.saveState()
+        c.setFont("Helvetica", 7.5)
+        c.setFillColor(colors.black)
+        c.drawCentredString(A4[0] / 2, 10 * mm, FORM_FOOTER)
+        c.restoreState()
 
     logo_drawing = _svg_drawing(protocol_logo_svg, 36 * mm, 16 * mm) if protocol_logo_svg else None
     mini_style = TableStyle([
@@ -281,23 +301,26 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
 
         votes_by_id = {row["candidate"].id: row["votes"] for row in r["rows"]}
         shown_ids: set[int] = set()
+        # Eine Stichwahl geht vor einem bloßen Mehrheitsgewinner: so lange die Wahlleitung "Stichwahl: ja" entschieden
+        # hat, gilt niemand als gewählt, auch wenn decide() rein rechnerisch schon eine Führende/einen Führenden kennt.
+        pending_runoff = r["decision"] == "yes" and r["plan"] and r["plan_kind"] == "speaker"
 
-        if r["winner"]:
-            c = r["winner"]
-            shown_ids.add(c.id)
-            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
-            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
-        elif r["decision"] == "yes" and r["plan"]:
+        if pending_runoff:
             for c in r["plan"]:
                 shown_ids.add(c.id)
             story.append(Paragraph(f"<strike>Als {escape(race.title)} wurde gewählt</strike>: Stichwahl erforderlich zwischen:",
                                    section))
             story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])] for c in r["plan"]]))
+        elif r["winner"]:
+            c = r["winner"]
+            shown_ids.add(c.id)
+            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
+            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
         else:
             story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
             story.append(mini_table([]))
 
-        if r["deputy"]:
+        if not pending_runoff and r["deputy"]:
             c = r["deputy"]
             shown_ids.add(c.id)
             story.append(Paragraph("1. Stellvertreter/in", section))
@@ -306,8 +329,14 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             story.append(Paragraph("<strike>1. Stellvertreter/in</strike>", section))
             story.append(mini_table([]))
 
-        story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # unser System vergibt nie mehr als einen Platz
-        story.append(mini_table([]))
+        origin = origin_deputies.get(race.id)
+        if origin:
+            c, v = origin
+            story.append(Paragraph("2. Stellvertreter/in", section))
+            story.append(mini_table([[c.name, c.info or "", str(v)]]))
+        else:
+            story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # sonst vergibt das System nie einen 2. Platz
+            story.append(mini_table([]))
 
         rest = [row for row in r["rows"] if row["votes"] > 0 and row["candidate"].id not in shown_ids]
         if rest:
@@ -315,17 +344,24 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest]))
 
         story += [Spacer(1, 3 * mm), Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]),
-                 Spacer(1, 12 * mm)]
+                 Spacer(1, 10 * mm)]
 
-        sign_rows = [["Die Wahlzeugen", ""]]
-        sign_rows += [["_______________________________", ""] for _ in range(max(0, extra_signers))]
-        sign_rows.append([f"Wahlleitung: {signed_by}", f"Datum: {fmt_local(utcnow())[:10]}"])
-        sign_rows.append(["_______________________________", ""])
-        t = Table(sign_rows, colWidths=[90 * mm, 60 * mm], hAlign="LEFT")
-        t.setStyle(TableStyle([("FONTNAME", (0, -2), (0, -2), "Helvetica-Bold"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-        story += [t, Spacer(1, 8 * mm), Paragraph(escape(FORM_FOOTER), foot_style)]
+        box_w, box_h = 58 * mm, 36 * mm
+        signers = [f"Wahlleitung: {signed_by}"] + [f"Wahlzeuge: {w}" for w in witnesses]
+        sign_rows = []
+        for j in range(0, len(signers), 2):
+            pair = signers[j:j + 2]
+            cells = [_sign_box(caption, box_h) for caption in pair]
+            if len(cells) == 1:
+                cells.append("")
+            sign_rows.append(cells)
+        t = Table(sign_rows, colWidths=[box_w, box_w], rowHeights=[box_h] * len(sign_rows), hAlign="LEFT")
+        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.6, colors.black), ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                              ("TOPPADDING", (0, 0), (-1, -1), 4)]))
+        story += [t, Spacer(1, 4 * mm), Paragraph(f"Datum: {fmt_local(utcnow())[:10]}", styles["Normal"])]
 
         if i < len(results) - 1:
             story.append(PageBreak())
-    doc.build(story)
+    doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return buf.getvalue()
