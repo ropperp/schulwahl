@@ -18,6 +18,14 @@
     <input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp">
     <p class="muted small">JPG, PNG oder WebP, max. 5 MB. Wird automatisch verkleinert. PNG mit transparentem Hintergrund sieht am besten aus. Das Logo erscheint oben auf allen Seiten.</p>
     {% if cfg.logo_id %}<label class="check"><input type="checkbox" name="remove_logo" value="1"> Logo entfernen</label>{% endif %}
+
+    <label for="protocol_logo">Protokoll-Logo (farbig, SVG)</label>
+    {% if cfg.protocol_logo_id %}<p><img class="logo-preview" src="/admin/settings/protocol-logo?v={{ cfg.protocol_logo_id }}" alt="Aktuelles Protokoll-Logo"></p>{% endif %}
+    <input id="protocol_logo" name="protocol_logo" type="file" accept="image/svg+xml,.svg">
+    <p class="muted small">Nur für das Protokoll im Papierform-Stil (Export bei einer Wahl): dort bleibt das Logo in Farbe. Alle anderen PDFs
+      (Code-Zettel, normales Protokoll) bleiben wie gewohnt tonersparend schwarz/weiß. SVG, max. 2 MB.</p>
+    {% if cfg.protocol_logo_id %}<label class="check"><input type="checkbox" name="remove_protocol_logo" value="1"> Protokoll-Logo entfernen</label>{% endif %}
+
     <button class="btn primary big" type="submit">Speichern</button>
   </form>
 </section>

@@ -7,6 +7,7 @@ from PIL import ImageOps, UnidentifiedImageError
 PILImage.MAX_IMAGE_PIXELS = 30_000_000  # Schutz vor Dekompressionsbomben
 MAX_PIXELS = 25_000_000  # harte Grenze (Pillow warnt zwischen 1x und 2x des Limits nur)
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_SVG_BYTES = 2 * 1024 * 1024
 ALLOWED = {"PNG", "JPEG", "WEBP"}
 
 
@@ -49,3 +50,32 @@ def process(data: bytes, kind: str) -> tuple[bytes, str]:
     img.thumbnail((600, 600), PILImage.LANCZOS)
     img.convert("RGBA").save(out, "PNG", optimize=True)
     return out.getvalue(), "image/png"
+
+
+def read_svg_upload(upload) -> bytes | None:
+    """Liest eine hochgeladene SVG-Datei (farbiges Protokoll-Logo); None, wenn keine ausgewählt wurde."""
+    if upload is None or not getattr(upload, "filename", ""):
+        return None
+    data = upload.file.read(MAX_SVG_BYTES + 1)
+    if not data:
+        return None
+    if len(data) > MAX_SVG_BYTES:
+        raise ImageError("Die SVG-Datei ist größer als 2 MB.")
+    return data
+
+
+def process_svg(data: bytes) -> bytes:
+    """Prüft eine hochgeladene SVG-Datei (gültiges XML, kein DOCTYPE/externe Entities gegen XXE) und gibt sie unverändert zurück."""
+    from lxml import etree
+
+    if b"<!DOCTYPE" in data or b"<!ENTITY" in data:
+        raise ImageError("Diese SVG-Datei wird aus Sicherheitsgründen nicht akzeptiert (DOCTYPE/ENTITY).")
+    try:
+        parser = etree.XMLParser(resolve_entities=False, no_network=True, dtd_validation=False,
+                                 load_dtd=False, huge_tree=False)
+        root = etree.fromstring(data, parser=parser)
+    except etree.XMLSyntaxError:
+        raise ImageError("Das ist keine gültige SVG-Datei.") from None
+    if root.tag.rsplit("}", 1)[-1] != "svg":
+        raise ImageError("Das ist keine gültige SVG-Datei.")
+    return data

@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session, selectinload
 from .. import candidate_io
 from .. import settings as app_settings
 from ..db import get_db
-from ..models import Candidate, Department, Election, Image, Race, Vote
-from ..pdfs import protocol_pdf
+from ..models import Candidate, Department, Election, Image, Race, User, Vote
+from ..pdfs import official_protocol_pdf, protocol_pdf
 from ..security import admin_form, audit, require_staff, staff_form
 from ..services import (STATUS_LABEL, compute_results, delete_election, election_status, name_problem, participation,
                         set_manual_results, short_name)
@@ -418,3 +418,19 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
                        cfg["school_name"], logo.data if logo else None)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="wahlprotokoll-{e.id}.pdf"'})
+
+
+@router.get("/elections/{election_id}/protocol-form.pdf")
+def protocol_form(request: Request, election_id: int, signers: int = 1, db: Session = Depends(get_db),
+                  user: User = Depends(require_staff)):
+    """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftenzeilen); erst nach Wahlende."""
+    e = get_election(db, election_id)
+    early = _ended_or_redirect(request, e)
+    if early:
+        return early
+    cfg = app_settings.get()
+    logo = db.get(Image, cfg["protocol_logo_id"]) if cfg["protocol_logo_id"] else None
+    pdf = official_protocol_pdf(e, compute_results(db, e), cfg["school_name"], logo.data if logo else None,
+                                user.username, extra_signers=max(0, min(6, signers)))
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="protokoll-papierform-{e.id}.pdf"'})

@@ -6,13 +6,16 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from xml.sax.saxutils import escape
 
 from .timeutil import fmt_local, utcnow
+
+# Fixe Kontaktdaten der HTL 1 für das Protokoll im Papierform-Stil (wie auf dem bisherigen Papierformular)
+FORM_FOOTER = "HTL1 Klagenfurt Lastenstraße 1, 9020 Klagenfurt    Tel: 0463/31605    direktion@htl1-klagenfurt.at"
 
 
 def logo_for_print(data: bytes) -> bytes:
@@ -199,5 +202,130 @@ def protocol_pdf(election, status_label: str, part: dict, results: list[dict],
     story += [Spacer(1, 15 * mm),
               Table([["_______________________________", "_______________________________"],
                      ["Wahlleiter/in", "Schulleitung / Zweite Person"]], hAlign="LEFT")]
+    doc.build(story)
+    return buf.getvalue()
+
+
+def _schuljahr(dt) -> str:
+    """Österreichisches Schuljahr (z. B. "2026/2027") für ein Datum; das Schuljahr beginnt im September."""
+    y = dt.year
+    return f"{y}/{y + 1}" if dt.month >= 9 else f"{y - 1}/{y}"
+
+
+def _svg_drawing(svg_bytes: bytes, max_w: float, max_h: float):
+    """Wandelt ein SVG-Logo in eine passend skalierte reportlab-Zeichnung um; None bei fehlerhafter Datei."""
+    from svglib.svglib import svg2rlg
+
+    try:
+        d = svg2rlg(io.BytesIO(svg_bytes))
+    except Exception:  # noqa: BLE001 - eine fehlerhafte SVG darf das Protokoll nicht zum Absturz bringen
+        return None
+    if not d or not d.width or not d.height:
+        return None
+    s = min(max_w / d.width, max_h / d.height)
+    d.width, d.height = d.width * s, d.height * s
+    d.scale(s, s)
+    return d
+
+
+def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
+                          signed_by: str, extra_signers: int = 1) -> bytes:
+    """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftenzeilen.
+
+    Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
+    Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
+    Massendruck (dafür gibt es weiterhin `protocol_pdf`).
+    """
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
+                            topMargin=16 * mm, bottomMargin=16 * mm, title=f"Wahlprotokoll – {election.name}")
+    styles = getSampleStyleSheet()
+    center = ParagraphStyle("center", parent=styles["Normal"], alignment=1)
+    center_bold = ParagraphStyle("center_bold", parent=center, fontName="Helvetica-Bold", fontSize=13, leading=16)
+    center_bold_small = ParagraphStyle("center_bold_small", parent=center, fontName="Helvetica-Bold", fontSize=11)
+    section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=10,
+                             spaceBefore=6, spaceAfter=2)
+    foot_style = ParagraphStyle("foot", parent=styles["Normal"], fontSize=7.5, textColor=colors.black)
+
+    logo_drawing = _svg_drawing(protocol_logo_svg, 36 * mm, 16 * mm) if protocol_logo_svg else None
+    mini_style = TableStyle([
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("ALIGN", (2, 0), (2, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ])
+
+    def mini_table(rows: list[list[str]]) -> Table:
+        """Name/Klasse/Stimmen-Tabelle; ohne Datenzeilen bleiben nur die Spaltentitel übrig (wie im Papierformular)."""
+        t = Table([["Name", "Klasse", "Stimmen"], *rows], colWidths=[85 * mm, 35 * mm, 25 * mm], hAlign="LEFT")
+        t.setStyle(mini_style)
+        return t
+
+    story = []
+    for i, r in enumerate(results):
+        race = r["race"]
+        header = Table([[logo_drawing or "", Paragraph("Wahlen", center_bold_small), ""]],
+                       colWidths=[40 * mm, 90 * mm, 30 * mm], rowHeights=[20 * mm])
+        header.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("ALIGN", (0, 0), (0, 0), "CENTER"),
+        ]))
+        story += [header, Spacer(1, 5 * mm), Paragraph(f"Ergebnis: {escape(race.title)}", center_bold)]
+        if r["department"]:
+            story.append(Paragraph(escape(r["department"]), center_bold))
+        if race.runoff_kind:
+            story.append(Paragraph("(Stichwahl)", center))
+        story.append(Spacer(1, 4 * mm))
+
+        votes_by_id = {row["candidate"].id: row["votes"] for row in r["rows"]}
+        shown_ids: set[int] = set()
+
+        if r["winner"]:
+            c = r["winner"]
+            shown_ids.add(c.id)
+            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
+            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
+        elif r["decision"] == "yes" and r["plan"]:
+            for c in r["plan"]:
+                shown_ids.add(c.id)
+            story.append(Paragraph(f"<strike>Als {escape(race.title)} wurde gewählt</strike>: Stichwahl erforderlich zwischen:",
+                                   section))
+            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])] for c in r["plan"]]))
+        else:
+            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
+            story.append(mini_table([]))
+
+        if r["deputy"]:
+            c = r["deputy"]
+            shown_ids.add(c.id)
+            story.append(Paragraph("1. Stellvertreter/in", section))
+            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
+        else:
+            story.append(Paragraph("<strike>1. Stellvertreter/in</strike>", section))
+            story.append(mini_table([]))
+
+        story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # unser System vergibt nie mehr als einen Platz
+        story.append(mini_table([]))
+
+        rest = [row for row in r["rows"] if row["votes"] > 0 and row["candidate"].id not in shown_ids]
+        if rest:
+            story.append(Paragraph("Weitere Ergebnisse", section))
+            story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest]))
+
+        story += [Spacer(1, 3 * mm), Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]),
+                 Spacer(1, 12 * mm)]
+
+        sign_rows = [["Die Wahlzeugen", ""]]
+        sign_rows += [["_______________________________", ""] for _ in range(max(0, extra_signers))]
+        sign_rows.append([f"Wahlleitung: {signed_by}", f"Datum: {fmt_local(utcnow())[:10]}"])
+        sign_rows.append(["_______________________________", ""])
+        t = Table(sign_rows, colWidths=[90 * mm, 60 * mm], hAlign="LEFT")
+        t.setStyle(TableStyle([("FONTNAME", (0, -2), (0, -2), "Helvetica-Bold"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
+        story += [t, Spacer(1, 8 * mm), Paragraph(escape(FORM_FOOTER), foot_style)]
+
+        if i < len(results) - 1:
+            story.append(PageBreak())
     doc.build(story)
     return buf.getvalue()

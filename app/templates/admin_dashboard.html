@@ -13,6 +13,10 @@
     {% if status == 'ended' %}
     <a class="btn" href="/admin/elections/{{ e.id }}/protocol.pdf" target="_blank">📄 Protokoll (PDF)</a>
     <a class="btn" href="/admin/elections/{{ e.id }}/results.csv">⬇ CSV</a>
+    <form method="get" action="/admin/elections/{{ e.id }}/protocol-form.pdf" target="_blank" class="row gap">
+      <div><label for="signers" class="muted small">Zeugen</label><input id="signers" name="signers" type="number" class="votecount" min="0" max="6" value="1"></div>
+      <button class="btn" type="submit">📄 Protokoll (Papierform)</button>
+    </form>
     <form method="post" action="/admin/elections/{{ e.id }}/publish" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
       <button class="btn">{{ 'Veröffentlichung zurücknehmen' if e.results_public else '📢 Ergebnis veröffentlichen' }}</button></form>
