@@ -45,6 +45,12 @@ def test_protocol_logo_rejects_non_svg_and_xxe(client, db):
         ("x.svg", b'<svg xmlns="http://www.w3.org/2000/svg"></notsvg>'),
         ("xxe.svg", b'<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
                     b'<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'),
+        ("ssrf.svg", b'<svg xmlns="http://www.w3.org/2000/svg"><image href="http://169.254.169.254/" width="1" height="1"/></svg>'),
+        ("ssrf2.svg", b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">'
+                      b'<image xlink:href="file:///etc/passwd" width="1" height="1"/></svg>'),
+        # DOCTYPE/ENTITY in anderer Kodierung (UTF-16): ein reiner Byte-Treffer auf "<!DOCTYPE" würde das übersehen
+        ("xxe-utf16.svg", '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE svg [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>'
+                          '<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'.encode("utf-16")),
     ]
     for name, data in bad_payloads:
         r = client.post("/admin/settings", data={"csrf_token": token, "school_name": "S"},
