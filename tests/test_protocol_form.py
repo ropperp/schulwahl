@@ -84,6 +84,54 @@ def test_protocol_form_pdf_renders_with_and_without_logo(client, db, election):
     assert "Adnan Afticosovic" in text and "Erna Barutsic" in text
 
 
+def test_placements_follow_the_actual_number_of_candidates(client, db):
+    """So viele Platzierungen wie Kandidat/innen mit Stimmen da sind - nichts wird durchgestrichen oder leer gezeigt."""
+    admin_login(client)
+    from app.models import Department
+
+    def race_with(n_candidates, name_suffix):
+        e = Election(name=f"Wahl {name_suffix}", start_at=utcnow() - timedelta(hours=2),
+                     end_at=utcnow() - timedelta(hours=1), closed_at=utcnow() - timedelta(hours=1))
+        e.departments = [Department(name="Elektrotechnik")]
+        db.add(e)
+        db.flush()
+        race = Race(election_id=e.id, title="Schulsprecher/in", position=0)
+        db.add(race)
+        db.flush()
+        names = ["Anna", "Ben", "Clara", "David"][:n_candidates]
+        cands = [Candidate(race_id=race.id, name=n) for n in names]
+        db.add_all(cands)
+        db.flush()
+        for i, c in enumerate(cands):
+            for _ in range(n_candidates - i):  # absteigende, eindeutige Stimmenzahl je Platz
+                db.add(Vote(id=uuid.uuid4().hex, race_id=race.id, candidate_id=c.id))
+        db.commit()
+        return e
+
+    # 2 Kandidat/innen: nur "Gewählt" + "1. Stellvertreter/in"
+    e2 = race_with(2, "zwei")
+    r = client.get(f"/admin/elections/{e2.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "1. Stellvertreter/in" in text
+        assert "2. Stellvertreter/in" not in text and "Weitere Ergebnisse" not in text
+
+    # 3 Kandidat/innen: zusätzlich "2. Stellvertreter/in", aber keine "Weitere Ergebnisse"
+    e3 = race_with(3, "drei")
+    r = client.get(f"/admin/elections/{e3.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "2. Stellvertreter/in" in text and "Clara" in text
+        assert "Weitere Ergebnisse" not in text
+
+    # 4 Kandidat/innen: die 4. geht unter "Weitere Ergebnisse"
+    e4 = race_with(4, "vier")
+    r = client.get(f"/admin/elections/{e4.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "Weitere Ergebnisse" in text and "David" in text.split("Weitere Ergebnisse")[1]
+
+
 def test_full_name_used_as_wahlleitung_on_protocol(client, db, election):
     token = admin_login(client)
     client.post("/admin/account/name", data={"csrf_token": token, "full_name": "Patrick Ropper"})
@@ -169,6 +217,8 @@ def test_runoff_protocol_lists_only_the_two_runoff_candidates(client, db):
     text = _pdf_text(r.content)
     if text is None:
         return
-    assert "2. Stellvertreter/in" in text
+    assert "1. Stellvertreter/in" in text
+    # nur 2 Antretende in der Stichwahl: keine "2. Stellvertreter/in"-Zeile (nichts durchgestrichen, einfach weggelassen)
+    assert "2. Stellvertreter/in" not in text
     # trotz nur 1 Stimme hätte "Clara" (ursprünglich 20 Stimmen) hier nichts verloren - keine Vermischung der Wahlen
     assert "Clara" not in text and "David" not in text
