@@ -308,28 +308,35 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             story.append(Paragraph(f"<strike>Als {escape(race.title)} wurde gewählt</strike>: Stichwahl erforderlich zwischen:",
                                    section))
             story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])] for c in r["plan"]]))
-        elif r["winner"]:
-            c = r["winner"]
-            shown_ids.add(c.id)
+            slot_labels = []  # Stichwahl noch offen: auch die Stellvertretung ist offen, alles andere -> "Weitere Ergebnisse"
+        elif not any(row["votes"] > 0 for row in r["rows"]):
             story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
-            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
+            story.append(Paragraph("Keine gültigen Stimmen.", styles["Normal"]))
+            slot_labels = []
         else:
-            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
-            story.append(mini_table([]))
+            slot_labels = [f"Als {escape(race.title)} wurde gewählt:", "1. Stellvertreter/in", "2. Stellvertreter/in"]
 
-        if not pending_runoff and r["deputy"]:
-            c = r["deputy"]
-            shown_ids.add(c.id)
-            story.append(Paragraph("1. Stellvertreter/in", section))
-            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])]]))
-        else:
-            story.append(Paragraph("<strike>1. Stellvertreter/in</strike>", section))
-            story.append(mini_table([]))
+        # Platzierungen richten sich nach der tatsächlichen Anzahl Kandidat/innen mit Stimmen - bei nur zwei
+        # Antretenden gibt es z. B. gar keine "2. Stellvertreter/in"; nichts wird durchgestrichen, Plätze ohne
+        # Kandidat/in werden einfach weggelassen. Gleichstand innerhalb eines Platzes: alle Betroffenen gemeinsam.
+        groups: list[list[dict]] = []
+        for row in r["rows"]:
+            if row["votes"] <= 0 or row["candidate"].id in shown_ids:
+                continue
+            if groups and groups[-1][0]["votes"] == row["votes"]:
+                groups[-1].append(row)
+            else:
+                groups.append([row])
+        for label in slot_labels:
+            if not groups:
+                break
+            group = groups.pop(0)
+            for row in group:
+                shown_ids.add(row["candidate"].id)
+            story.append(Paragraph(label, section))
+            story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in group]))
 
-        story.append(Paragraph("<strike>2. Stellvertreter/in</strike>", section))  # unser System vergibt nie mehr als einen Platz
-        story.append(mini_table([]))
-
-        rest = [row for row in r["rows"] if row["votes"] > 0 and row["candidate"].id not in shown_ids]
+        rest = [row for group in groups for row in group]
         if rest:
             story.append(Paragraph("Weitere Ergebnisse", section))
             story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest]))
