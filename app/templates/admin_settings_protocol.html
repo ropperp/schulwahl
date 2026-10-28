@@ -1,0 +1,44 @@
+{% extends "admin_base.html" %}
+{% block title %}Protokollbearbeitung{% endblock %}
+{% block mainclass %}narrow{% endblock %}
+{% block content %}
+<h1>Einstellungen</h1>
+<nav class="tabs">
+  <a href="/admin/settings">Allgemein</a>
+  <a href="/admin/settings/protocol" class="on">Protokollbearbeitung</a>
+</nav>
+<section class="card">
+  <h2>Protokoll im Papierform-Stil</h2>
+  <p class="muted small">Gestaltung des Wahlprotokolls im Papierform-Stil (Dashboard → „Protokoll“). Das normale, tonersparende
+    Protokoll ist davon nicht betroffen.</p>
+  <form method="post" action="/admin/settings/protocol" enctype="multipart/form-data" id="protocol-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+
+    <label for="protocol_logo">Protokoll-Logo (farbig, SVG)</label>
+    {% if cfg.protocol_logo_id %}<p><img class="logo-preview" src="/admin/settings/protocol-logo?v={{ cfg.protocol_logo_id }}" alt="Aktuelles Protokoll-Logo"></p>{% endif %}
+    <input id="protocol_logo" name="protocol_logo" type="file" accept="image/svg+xml,.svg">
+    <p class="muted small">Dort bleibt das Logo in Farbe (alle anderen PDFs bleiben tonersparend schwarz/weiß). SVG, max. 2 MB.</p>
+    {% if cfg.protocol_logo_id %}<label class="check"><input type="checkbox" name="remove_protocol_logo" value="1"> Protokoll-Logo entfernen</label>{% endif %}
+
+    <label for="protocol_location">Ort (für die Zeile „Ort, Datum“)</label>
+    <input id="protocol_location" name="protocol_location" value="{{ cfg.protocol_location }}" maxlength="100" placeholder="z. B. Klagenfurt">
+
+    <label>Schriftgrößen (Punkt)</label>
+    <div class="grid2">
+      <div><label for="protocol_font_header">„Wahlen“ im Kopf</label>
+        <input id="protocol_font_header" name="protocol_font_header" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.header }}"></div>
+      <div><label for="protocol_font_title">Überschriften (Ergebnis der ..., SchulsprecherIn)</label>
+        <input id="protocol_font_title" name="protocol_font_title" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.title }}"></div>
+      <div><label for="protocol_font_table">Name/Klasse/Stimmen</label>
+        <input id="protocol_font_table" name="protocol_font_table" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.table }}"></div>
+      <div><label for="protocol_font_caption">Namen unter den Unterschriften</label>
+        <input id="protocol_font_caption" name="protocol_font_caption" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.caption }}"></div>
+    </div>
+
+    <div class="row gap wrap">
+      <button class="btn primary big" type="submit">Speichern</button>
+      <button class="btn big" type="submit" formaction="/admin/settings/protocol/preview" formtarget="_blank">Vorschau mit Testdaten</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

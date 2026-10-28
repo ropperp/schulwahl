@@ -24,16 +24,16 @@ def _pdf_text(pdf_bytes: bytes) -> str | None:
 def test_protocol_logo_upload_preview_and_remove(client, db):
     token = admin_login(client)
     assert client.get("/admin/settings/protocol-logo").status_code == 404
-    r = client.post("/admin/settings", data={"csrf_token": token, "school_name": "HTL Beispielstadt"},
+    r = client.post("/admin/settings/protocol", data={"csrf_token": token},
                     files={"protocol_logo": ("logo.svg", SVG, "image/svg+xml")})
     assert r.status_code == 303
-    settings_page = client.get("/admin/settings")
+    settings_page = client.get("/admin/settings/protocol")
     assert "/admin/settings/protocol-logo?v=" in settings_page.text
     preview = client.get("/admin/settings/protocol-logo")
     assert preview.status_code == 200 and preview.headers["content-type"] == "image/svg+xml"
     assert preview.content == SVG
 
-    client.post("/admin/settings", data={"csrf_token": token, "school_name": "HTL Beispielstadt", "remove_protocol_logo": "1"})
+    client.post("/admin/settings/protocol", data={"csrf_token": token, "remove_protocol_logo": "1"})
     assert client.get("/admin/settings/protocol-logo").status_code == 404
     assert db.scalar(select(func.count()).select_from(Image)) == 0
 
@@ -53,11 +53,37 @@ def test_protocol_logo_rejects_non_svg_and_xxe(client, db):
                           '<svg xmlns="http://www.w3.org/2000/svg"><text>&xxe;</text></svg>'.encode("utf-16")),
     ]
     for name, data in bad_payloads:
-        r = client.post("/admin/settings", data={"csrf_token": token, "school_name": "S"},
+        r = client.post("/admin/settings/protocol", data={"csrf_token": token},
                         files={"protocol_logo": (name, data, "image/svg+xml")})
         assert r.status_code == 303
         assert client.get("/admin/settings/protocol-logo").status_code == 404
     assert db.scalar(select(func.count()).select_from(Image)) == 0
+
+
+def test_protocol_location_and_fonts_persist_and_apply(client, db, election):
+    token = admin_login(client)
+    r = client.post("/admin/settings/protocol", data={
+        "csrf_token": token, "protocol_location": "Klagenfurt", "protocol_font_header": "20",
+        "protocol_font_title": "18", "protocol_font_table": "14", "protocol_font_caption": "11"})
+    assert r.status_code == 303
+    page = client.get("/admin/settings/protocol")
+    assert 'value="Klagenfurt"' in page.text and 'value="20.0"' in page.text
+
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "Klagenfurt," in text
+
+
+def test_protocol_preview_renders_without_saving(client, db):
+    token = admin_login(client)
+    r = client.post("/admin/settings/protocol/preview",
+                    data={"csrf_token": token, "protocol_location": "Testort", "protocol_font_table": "99999"})
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    # nichts wurde gespeichert (ungültige Schriftgröße hätte sonst auch einen Fehler auslösen müssen)
+    page = client.get("/admin/settings/protocol")
+    assert 'value="Testort"' not in page.text
 
 
 def test_protocol_form_requires_ended_election(client, db, election):
@@ -73,7 +99,7 @@ def test_protocol_form_pdf_renders_with_and_without_logo(client, db, election):
     r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
 
-    client.post("/admin/settings", data={"csrf_token": token, "school_name": "HTL Beispielstadt"},
+    client.post("/admin/settings/protocol", data={"csrf_token": token},
                files={"protocol_logo": ("logo.svg", SVG, "image/svg+xml")})
     r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?witnesses=Adnan+Afticosovic&witnesses=Erna+Barutsic")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
@@ -82,6 +108,29 @@ def test_protocol_form_pdf_renders_with_and_without_logo(client, db, election):
     if text is None:
         return
     assert "Adnan Afticosovic" in text and "Erna Barutsic" in text
+
+
+def test_protocol_title_wording_and_single_race_filter(client, db, election):
+    token = admin_login(client)
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    school_race = next(r for r in election.races if r.department_id is None)
+    dept_race = next(r for r in election.races if r.department_id is not None)
+
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf")
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "Ergebnis der Schulsprecherwahl" in text and "SchulsprecherIn" in text
+        assert "Ergebnis der Abteilungssprecherwahl" in text
+
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?race_id={school_race.id}")
+    assert r.status_code == 200
+    text = _pdf_text(r.content)
+    if text is not None:
+        assert "Ergebnis der Schulsprecherwahl" in text
+        assert "Ergebnis der Abteilungssprecherwahl" not in text
+
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?race_id=999999")
+    assert r.status_code == 404
 
 
 def test_placements_follow_the_actual_number_of_candidates(client, db):

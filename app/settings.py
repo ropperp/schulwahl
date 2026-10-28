@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from . import config
 from .db import SessionLocal
 from .models import Image, Setting
+from .pdfs import DEFAULT_FONT_SIZES
 
 CACHE_SECONDS = 5
 
@@ -17,8 +18,18 @@ _cache: dict | None = None
 _loaded_at = 0.0
 
 
+def _protocol_font(rows: dict, key: str) -> float:
+    """Liest eine Protokoll-Schriftgröße aus den Einstellungen; Vorgabewert, wenn nichts/Ungültiges hinterlegt ist."""
+    raw = rows.get(f"protocol_font_{key}", "")
+    try:
+        n = float(raw)
+    except ValueError:
+        return DEFAULT_FONT_SIZES[key]
+    return n if 6 <= n <= 40 else DEFAULT_FONT_SIZES[key]
+
+
 def get() -> dict:
-    """Aktuelle Einstellungen (Schulname, Logo, QR-Adresse); für 5 Sekunden zwischengespeichert."""
+    """Aktuelle Einstellungen (Schulname, Logo, QR-Adresse, Protokoll); für 5 Sekunden zwischengespeichert."""
     global _cache, _loaded_at
     if _cache is None or time.monotonic() - _loaded_at > CACHE_SECONDS:
         with SessionLocal() as db:
@@ -28,7 +39,9 @@ def get() -> dict:
         _cache = {"school_name": rows.get("school_name") or config.SCHOOL_NAME,
                   "logo_id": int(logo) if logo.isdigit() else None,
                   "protocol_logo_id": int(protocol_logo) if protocol_logo.isdigit() else None,
-                  "public_url": rows.get("public_url") or config.PUBLIC_URL}
+                  "public_url": rows.get("public_url") or config.PUBLIC_URL,
+                  "protocol_location": rows.get("protocol_location", "")[:100],
+                  "protocol_fonts": {k: _protocol_font(rows, k) for k in DEFAULT_FONT_SIZES}}
         _loaded_at = time.monotonic()
     return _cache
 
@@ -79,12 +92,21 @@ def _set(db: Session, key: str, value: str) -> None:
 
 def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, remove_logo: bool = False,
          public_url: str | None = None, protocol_logo: tuple[bytes, str] | None = None,
-         remove_protocol_logo: bool = False) -> None:
-    """Speichert Schulname, optional Logo(s) und QR-Adresse und committet (auch andere offene Änderungen derselben Sitzung)."""
+         remove_protocol_logo: bool = False, protocol_location: str | None = None,
+         protocol_fonts: dict[str, float] | None = None) -> None:
+    """Speichert Schulname, optional Logo(s), QR-Adresse und Protokoll-Einstellungen; committet (auch andere offene
+
+    Änderungen derselben Sitzung).
+    """
     cfg = get()
     _set(db, "school_name", school_name)
     if public_url is not None:
         _set(db, "public_url", public_url)
+    if protocol_location is not None:
+        _set(db, "protocol_location", protocol_location)
+    if protocol_fonts:
+        for key, value in protocol_fonts.items():
+            _set(db, f"protocol_font_{key}", str(value))
     if logo or remove_logo:
         if cfg["logo_id"]:
             db.query(Image).filter(Image.id == cfg["logo_id"]).delete()
