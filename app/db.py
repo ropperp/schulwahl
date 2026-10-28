@@ -51,6 +51,7 @@ _NEW_COLUMNS = [
     ("races", "runoff_decision", "VARCHAR(10) NOT NULL DEFAULT ''"),
     ("codes", "group_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
     ("elections", "source", "VARCHAR(10) NOT NULL DEFAULT 'live'"),
+    ("users", "full_name", "VARCHAR(100) NOT NULL DEFAULT ''"),
 ]
 
 

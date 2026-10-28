@@ -7,6 +7,16 @@
   <p class="muted">Angemeldet als <strong>{{ user.username }}</strong> ({{ ROLE_LABEL[user.role] }})</p>
   {% if user.must_change %}<div class="alert error">Bitte wähle jetzt ein eigenes Passwort. Erst danach kannst du das Backoffice benutzen.</div>{% endif %}
   {% if error %}<div class="alert error" role="alert">{{ error }}</div>{% endif %}
+
+  <h2>Vollständiger Name</h2>
+  <form method="post" action="/admin/account/name">
+    <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
+    <label for="full_name">Vollständiger Name</label>
+    <input id="full_name" name="full_name" value="{{ user.full_name }}" maxlength="100" placeholder="z. B. Patrick Ropper">
+    <p class="muted small">Erscheint z. B. auf dem Wahlprotokoll im Papierform-Stil als Wahlleitung, statt des Benutzernamens. Bleibt das Feld leer, wird der Benutzername verwendet.</p>
+    <button class="btn" type="submit">Name speichern</button>
+  </form>
+
   <h2>Passwort ändern</h2>
   <form method="post" action="/admin/account">
     <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">

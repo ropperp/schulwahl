@@ -64,18 +64,33 @@ def read_svg_upload(upload) -> bytes | None:
     return data
 
 
+_XLINK_HREF = "{http://www.w3.org/1999/xlink}href"
+
+
 def process_svg(data: bytes) -> bytes:
-    """Prüft eine hochgeladene SVG-Datei (gültiges XML, kein DOCTYPE/externe Entities gegen XXE) und gibt sie unverändert zurück."""
+    """Prüft eine hochgeladene SVG-Datei: gültiges XML, kein DOCTYPE/externe Entities (XXE), keine externen
+
+    `href`/`xlink:href`-Verweise (nur `data:`- oder interne `#`-Verweise erlaubt - sonst könnte eine eingebettete
+    `<image>` beim Rendern des Protokolls eine http(s)/file-Adresse laden, SSRF). Die DOCTYPE-Prüfung läuft auf dem
+    geparsten Baum (nicht auf den rohen Bytes) - eine andere Kodierung (z. B. UTF-16) kann einen reinen Text-Treffer
+    sonst umgehen. Gespeichert wird die vom gehärteten Parser neu serialisierte Fassung, nie die Roh-Bytes.
+    """
     from lxml import etree
 
-    if b"<!DOCTYPE" in data or b"<!ENTITY" in data:
-        raise ImageError("Diese SVG-Datei wird aus Sicherheitsgründen nicht akzeptiert (DOCTYPE/ENTITY).")
     try:
         parser = etree.XMLParser(resolve_entities=False, no_network=True, dtd_validation=False,
                                  load_dtd=False, huge_tree=False)
         root = etree.fromstring(data, parser=parser)
     except etree.XMLSyntaxError:
         raise ImageError("Das ist keine gültige SVG-Datei.") from None
+    if root.getroottree().docinfo.doctype:
+        raise ImageError("Diese SVG-Datei wird aus Sicherheitsgründen nicht akzeptiert (DOCTYPE/ENTITY).")
     if root.tag.rsplit("}", 1)[-1] != "svg":
         raise ImageError("Das ist keine gültige SVG-Datei.")
-    return data
+    for el in root.iter():
+        for attr in ("href", _XLINK_HREF):
+            href = el.get(attr)
+            if href and not href.startswith("#") and not href.startswith("data:"):
+                raise ImageError("Diese SVG-Datei enthält einen externen Verweis (href) und wird aus Sicherheitsgründen "
+                                 "nicht akzeptiert.")
+    return etree.tostring(root)

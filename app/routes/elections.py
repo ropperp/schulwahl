@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
@@ -421,16 +421,17 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
 
 
 @router.get("/elections/{election_id}/protocol-form.pdf")
-def protocol_form(request: Request, election_id: int, signers: int = 1, db: Session = Depends(get_db),
-                  user: User = Depends(require_staff)):
-    """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftenzeilen); erst nach Wahlende."""
+def protocol_form(request: Request, election_id: int, witnesses: list[str] = Query(default=[]),
+                  db: Session = Depends(get_db), user: User = Depends(require_staff)):
+    """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftsfelder); erst nach Wahlende."""
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
     if early:
         return early
     cfg = app_settings.get()
     logo = db.get(Image, cfg["protocol_logo_id"]) if cfg["protocol_logo_id"] else None
-    pdf = official_protocol_pdf(e, compute_results(db, e), cfg["school_name"], logo.data if logo else None,
-                                user.username, extra_signers=max(0, min(6, signers)))
+    results = compute_results(db, e)
+    pdf = official_protocol_pdf(e, results, cfg["school_name"], logo.data if logo else None,
+                                user.full_name or user.username, witnesses=witnesses)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="protokoll-papierform-{e.id}.pdf"'})

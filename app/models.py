@@ -137,6 +137,8 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True)
     role: Mapped[str] = mapped_column(String(20), default="wahlleiter")
     password_hash: Mapped[str] = mapped_column(String(300))
+    # Vollständiger Name (optional), z. B. für das Papierform-Protokoll - der Login-Benutzername bleibt oft kürzer
+    full_name: Mapped[str] = mapped_column(String(100), default="", server_default="")
     # Nach einem Zurücksetzen durch den Admin muss die Person beim nächsten Login ein eigenes Passwort wählen.
     must_change: Mapped[bool] = mapped_column(Boolean, default=False)
     # Wird bei jeder Passwortänderung erhöht und macht alle bestehenden Sitzungen ungültig.

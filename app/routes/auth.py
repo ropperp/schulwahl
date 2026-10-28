@@ -161,3 +161,14 @@ def account_change(request: Request, form=Depends(staff_form), user: User = Depe
     request.session["sv"] = user.session_version  # andere Sitzungen dieses Kontos sind damit abgemeldet
     flash(request, "Passwort geändert. Alle anderen Anmeldungen mit diesem Konto wurden beendet.")
     return go("/admin")
+
+
+@router.post("/account/name")
+def account_name(request: Request, form=Depends(staff_form), user: User = Depends(require_staff),
+                 db: Session = Depends(get_db)):
+    """Ändert den eigenen vollständigen Namen (erscheint z. B. auf dem Papierform-Protokoll statt des Benutzernamens)."""
+    user.full_name = str(form.get("full_name", "")).strip()[:100]
+    audit(db, request, "full_name_changed", user.full_name or "(entfernt)")
+    db.commit()
+    flash(request, "Name gespeichert.")
+    return go("/admin/account")
