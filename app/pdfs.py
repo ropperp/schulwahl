@@ -239,8 +239,8 @@ def _sign_box(caption: str, box_h: float, font_size: float) -> list:
 
 
 # Schriftgrößen (Punkt) und Abstände (mm), wenn in den Protokoll-Einstellungen nichts anderes hinterlegt ist
-DEFAULT_FONT_SIZES = {"header": 16, "title": 13, "table": 11, "caption": 9, "footer": 7.5, "invalid": 10}
-DEFAULT_SPACING = {"heading": 1.5, "result": 5, "header_gap": 1.5}  # "heading" = nach einer Überschrift (vor ihrer Tabelle)
+DEFAULT_FONT_SIZES = {"header": 16, "title": 14, "table": 13, "caption": 9, "footer": 7.5, "invalid": 10}
+DEFAULT_SPACING = {"heading": 5, "result": 6, "header_gap": 4}  # "heading" = nach einer Überschrift (vor ihrer Tabelle)
 # "result" = nach einer Person/einem Ergebnis (vor der nächsten Überschrift)
 # "header_gap" = nach den Spaltentiteln Name/Klasse/Stimmen (vor den dynamischen Werten darunter)
 
