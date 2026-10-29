@@ -33,6 +33,10 @@
         <input id="protocol_font_table" name="protocol_font_table" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.table }}"></div>
       <div><label for="protocol_font_caption">Namen unter den Unterschriften</label>
         <input id="protocol_font_caption" name="protocol_font_caption" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.caption }}"></div>
+      <div><label for="protocol_font_invalid">Ungültige Stimmen</label>
+        <input id="protocol_font_invalid" name="protocol_font_invalid" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.invalid }}"></div>
+      <div><label for="protocol_font_footer">Fußzeile (Kontaktdaten)</label>
+        <input id="protocol_font_footer" name="protocol_font_footer" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.footer }}"></div>
     </div>
 
     <label>Abstände (mm)</label>
@@ -41,6 +45,8 @@
         <input id="protocol_space_heading" name="protocol_space_heading" type="number" min="0" max="30" step="0.5" value="{{ cfg.protocol_spacing.heading }}"></div>
       <div><label for="protocol_space_result">Nach einer Person/einem Ergebnis</label>
         <input id="protocol_space_result" name="protocol_space_result" type="number" min="0" max="30" step="0.5" value="{{ cfg.protocol_spacing.result }}"></div>
+      <div><label for="protocol_space_header_gap">Nach Name/Klasse/Stimmen (vor den Werten)</label>
+        <input id="protocol_space_header_gap" name="protocol_space_header_gap" type="number" min="0" max="30" step="0.5" value="{{ cfg.protocol_spacing.header_gap }}"></div>
     </div>
 
     <div class="row gap wrap">

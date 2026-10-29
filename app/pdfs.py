@@ -239,24 +239,21 @@ def _sign_box(caption: str, box_h: float, font_size: float) -> list:
 
 
 # Schriftgrößen (Punkt) und Abstände (mm), wenn in den Protokoll-Einstellungen nichts anderes hinterlegt ist
-DEFAULT_FONT_SIZES = {"header": 16, "title": 13, "table": 11, "caption": 9}
-DEFAULT_SPACING = {"heading": 1.5, "result": 5}  # "heading" = nach einer Überschrift (vor ihrer Tabelle)
+DEFAULT_FONT_SIZES = {"header": 16, "title": 13, "table": 11, "caption": 9, "footer": 7.5, "invalid": 10}
+DEFAULT_SPACING = {"heading": 1.5, "result": 5, "header_gap": 1.5}  # "heading" = nach einer Überschrift (vor ihrer Tabelle)
 # "result" = nach einer Person/einem Ergebnis (vor der nächsten Überschrift)
+# "header_gap" = nach den Spaltentiteln Name/Klasse/Stimmen (vor den dynamischen Werten darunter)
 
 
 def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
                           signed_by: str, witnesses: list[str] | None = None, location: str = "",
-                          font_sizes: dict[str, float] | None = None, spacing: dict[str, float] | None = None,
-                          compact: bool = False) -> bytes:
-    """Wahlprotokoll im Stil des bisherigen Papierformulars, farbiges Logo, Unterschriftsfelder.
+                          font_sizes: dict[str, float] | None = None, spacing: dict[str, float] | None = None) -> bytes:
+    """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftsfelder.
 
     Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
     Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
     Massendruck (dafür gibt es weiterhin `protocol_pdf`). `font_sizes`/`spacing` überschreiben einzelne Werte aus
-    `DEFAULT_FONT_SIZES`/`DEFAULT_SPACING` (aus den Protokoll-Einstellungen). Ohne `compact` (Standard, "einzeln")
-    bekommt jeder Wahlgang sein eigenes Blatt mit Kopf und eigenen Unterschriftsfeldern. Mit `compact=True`
-    ("gesammelt") stehen alle Wahlgänge kompakt hintereinander auf möglichst wenigen Seiten, mit einem gemeinsamen
-    Kopf und EINEM gemeinsamen Unterschriftenblock am Ende.
+    `DEFAULT_FONT_SIZES`/`DEFAULT_SPACING` (aus den Protokoll-Einstellungen).
     """
     witnesses = [w.strip()[:100] for w in (witnesses or []) if w.strip()][:10]
     fonts = {**DEFAULT_FONT_SIZES, **(font_sizes or {})}
@@ -272,11 +269,13 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
                                         fontSize=fonts["header"])
     section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=fonts["table"],
                              spaceBefore=6, spaceAfter=0)
+    invalid_style = ParagraphStyle("invalid", parent=styles["Normal"], fontSize=fonts["invalid"],
+                                   leading=fonts["invalid"] + 2)
 
     def draw_footer(c, _doc):
         """Fußzeile fix am unteren Rand jeder Seite (nicht Teil des fließenden Inhalts)."""
         c.saveState()
-        c.setFont("Helvetica", 7.5)
+        c.setFont("Helvetica", fonts["footer"])
         c.setFillColor(colors.black)
         c.drawCentredString(A4[0] / 2, 10 * mm, FORM_FOOTER)
         c.restoreState()
@@ -288,6 +287,7 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
         ("ALIGN", (2, 0), (2, -1), "RIGHT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, 0), sp["header_gap"] * mm),  # Abstand Spaltentitel -> erste Datenzeile
     ])  # bewusst ohne Rahmen/Linien
 
     def mini_table(rows: list[list[str]]) -> Table:
@@ -358,7 +358,7 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             slot_labels = []  # Stichwahl noch offen: auch die Stellvertretung ist offen, alles andere -> "Weitere Ergebnisse"
         elif not any(row["votes"] > 0 for row in r["rows"]):
             block += [Paragraph(f"Als {escape(race.title)} wurde gewählt:", section), Spacer(1, sp["heading"] * mm),
-                     Paragraph("Keine gültigen Stimmen.", styles["Normal"]), Spacer(1, sp["result"] * mm)]
+                     Paragraph("Keine gültigen Stimmen.", invalid_style), Spacer(1, sp["result"] * mm)]
             slot_labels = []
         else:
             slot_labels = [f"Als {escape(race.title)} wurde gewählt:", "1. Stellvertreter/in", "2. Stellvertreter/in"]
@@ -387,20 +387,13 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             block += heading_table("Weitere Ergebnisse",
                                    [[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest])
 
-        block.append(Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]))
+        block.append(Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", invalid_style))
         return block
 
     story = []
-    if compact:
-        story += [header_table(), Spacer(1, 5 * mm)]
-        for r in results:
-            story += race_block(r)
-            story.append(Spacer(1, 6 * mm))
-        story += signature_block()
-    else:
-        for i, r in enumerate(results):
-            story += [header_table(), Spacer(1, 5 * mm)] + race_block(r) + [Spacer(1, 6 * mm)] + signature_block()
-            if i < len(results) - 1:
-                story.append(PageBreak())
+    for i, r in enumerate(results):
+        story += [header_table(), Spacer(1, 5 * mm)] + race_block(r) + [Spacer(1, 6 * mm)] + signature_block()
+        if i < len(results) - 1:
+            story.append(PageBreak())
     doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return buf.getvalue()

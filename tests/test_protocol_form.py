@@ -283,13 +283,39 @@ def test_protocol_form_accepts_empty_race_id(client, db, election):
     assert r.status_code == 400
 
 
-def test_protocol_form_compact_layout_has_one_shared_signature_block(client, db, election):
+def test_protocol_form_one_signature_block_per_race(client, db, election):
+    """Jeder Wahlgang bekommt sein eigenes Blatt mit eigenem Unterschriftenblock (kein "gesammelt"-Modus mehr)."""
     token = admin_login(client)
     client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
-    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?layout=gesammelt&witnesses=Max+Beispiel")
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?witnesses=Max+Beispiel")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
     text = _pdf_text(r.content)
     if text is None:
         return
-    assert text.count("Wahlleitung:") == 1  # nur EIN gemeinsamer Unterschriftenblock, nicht je Wahlgang
+    assert text.count("Wahlleitung:") == len(election.races)
     assert "Ergebnis der Schulsprecherwahl" in text and "Ergebnis der Abteilungssprecherwahl" in text
+
+
+def test_protocol_gesammelt_button_still_serves_toner_saving_pdf(client, db, election):
+    """Das zusammengeführte "Protokoll"-Menü verlinkt für "Gesammelt" weiterhin auf das bisherige /protocol.pdf."""
+    token = admin_login(client)
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    dashboard = client.get(f"/admin/elections/{election.id}/dashboard")
+    assert f"/admin/elections/{election.id}/protocol.pdf" in dashboard.text
+    assert f"/admin/elections/{election.id}/protocol-form.pdf" in dashboard.text
+    r = client.get(f"/admin/elections/{election.id}/protocol.pdf")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+
+
+def test_protocol_new_font_and_spacing_settings_persist_and_apply(client, db, election):
+    token = admin_login(client)
+    r = client.post("/admin/settings/protocol", data={
+        "csrf_token": token, "protocol_font_footer": "14", "protocol_font_invalid": "18",
+        "protocol_space_header_gap": "9"})
+    assert r.status_code == 303
+    page = client.get("/admin/settings/protocol")
+    assert 'value="14.0"' in page.text and 'value="18.0"' in page.text and 'value="9.0"' in page.text
+
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
