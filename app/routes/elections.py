@@ -422,13 +422,11 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
 
 @router.get("/elections/{election_id}/protocol-form.pdf")
 def protocol_form(request: Request, election_id: int, witnesses: list[str] = Query(default=[]),
-                  layout: str = "einzeln", race_id: str = "", db: Session = Depends(get_db),
-                  user: User = Depends(require_staff)):
+                  race_id: str = "", db: Session = Depends(get_db), user: User = Depends(require_staff)):
     """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftsfelder); erst nach Wahlende.
 
-    `layout`: "einzeln" (Standard) = jeder Wahlgang auf einem eigenen Blatt mit eigenen Unterschriftsfeldern;
-    "gesammelt" = alle Wahlgänge kompakt hintereinander auf möglichst wenigen Seiten mit EINEM gemeinsamen
-    Unterschriftenblock. `race_id` (optional) beschränkt auf einen einzelnen Wahlgang.
+    Ein Blatt je Wahlgang mit eigenem Kopf und eigenen Unterschriftsfeldern. `race_id` (optional) beschränkt auf
+    einen einzelnen Wahlgang; leerer String (so schickt das Dashboard-Formular es ohne Auswahl) zählt als kein Filter.
     """
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
@@ -448,6 +446,6 @@ def protocol_form(request: Request, election_id: int, witnesses: list[str] = Que
     pdf = official_protocol_pdf(e, results, cfg["school_name"], logo.data if logo else None,
                                 user.full_name or user.username, witnesses=witnesses,
                                 location=cfg["protocol_location"], font_sizes=cfg["protocol_fonts"],
-                                spacing=cfg["protocol_spacing"], compact=(layout == "gesammelt"))
+                                spacing=cfg["protocol_spacing"])
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="protokoll-papierform-{e.id}.pdf"'})

@@ -11,22 +11,22 @@
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}"><button class="btn danger">⏹ Wahl jetzt beenden</button></form>
     {% endif %}
     {% if status == 'ended' %}
-    <a class="btn" href="/admin/elections/{{ e.id }}/protocol.pdf" target="_blank">📄 Protokoll (PDF)</a>
     <a class="btn" href="/admin/elections/{{ e.id }}/results.csv">⬇ CSV</a>
     <details class="inlinedet">
-      <summary class="btn">📄 Protokoll (Papierform)</summary>
-      <form method="get" action="/admin/elections/{{ e.id }}/protocol-form.pdf" target="_blank" class="editform">
-        <label for="layout">Art</label>
-        <select id="layout" name="layout">
-          <option value="einzeln">Einzeln – ein Blatt je Wahlgang</option>
-          <option value="gesammelt">Gesammelt – alle Wahlgänge kompakt auf möglichst wenigen Seiten</option>
-        </select>
-        <p class="muted small">Wer hat beim Auszählen geholfen (Wahlzeugen)? Name reicht, wird mit auf das Protokoll gedruckt. Leere Felder bleiben weg.</p>
-        {% for i in range(1, 7) %}
-        <label for="w{{ i }}">Wahlzeuge {{ i }}</label><input id="w{{ i }}" name="witnesses" placeholder="Name">
-        {% endfor %}
-        <button class="btn primary small" type="submit">Protokoll erzeugen</button>
-      </form>
+      <summary class="btn">📄 Protokoll</summary>
+      <div class="editform">
+        <p class="muted small"><strong>Gesammelt</strong>: kompakte Zusammenfassung aller Wahlgänge, tonersparend schwarz/weiß.</p>
+        <a class="btn" href="/admin/elections/{{ e.id }}/protocol.pdf" target="_blank">Gesammelt (PDF)</a>
+
+        <p class="muted small"><strong>Einzeln</strong> – ein Blatt je Wahlgang im Papierform-Stil, mit Unterschriftsfeldern.
+          Wer hat beim Auszählen geholfen (Wahlzeugen)? Name reicht, wird mit auf das Protokoll gedruckt. Leere Felder bleiben weg.</p>
+        <form method="get" action="/admin/elections/{{ e.id }}/protocol-form.pdf" target="_blank">
+          {% for i in range(1, 7) %}
+          <label for="w{{ i }}">Wahlzeuge {{ i }}</label><input id="w{{ i }}" name="witnesses" placeholder="Name">
+          {% endfor %}
+          <button class="btn primary small" type="submit">Einzeln erzeugen</button>
+        </form>
+      </div>
     </details>
     <form method="post" action="/admin/elections/{{ e.id }}/publish" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf(request) }}">
