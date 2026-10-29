@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from . import config
 from .db import SessionLocal
 from .models import Image, Setting
-from .pdfs import DEFAULT_FONT_SIZES
+from .pdfs import DEFAULT_FONT_SIZES, DEFAULT_SPACING
 
 CACHE_SECONDS = 5
 
@@ -28,6 +28,16 @@ def _protocol_font(rows: dict, key: str) -> float:
     return n if 6 <= n <= 40 else DEFAULT_FONT_SIZES[key]
 
 
+def _protocol_spacing(rows: dict, key: str) -> float:
+    """Liest einen Protokoll-Abstand (mm) aus den Einstellungen; Vorgabewert, wenn nichts/Ungültiges hinterlegt ist."""
+    raw = rows.get(f"protocol_space_{key}", "")
+    try:
+        n = float(raw)
+    except ValueError:
+        return DEFAULT_SPACING[key]
+    return n if 0 <= n <= 30 else DEFAULT_SPACING[key]
+
+
 def get() -> dict:
     """Aktuelle Einstellungen (Schulname, Logo, QR-Adresse, Protokoll); für 5 Sekunden zwischengespeichert."""
     global _cache, _loaded_at
@@ -41,7 +51,8 @@ def get() -> dict:
                   "protocol_logo_id": int(protocol_logo) if protocol_logo.isdigit() else None,
                   "public_url": rows.get("public_url") or config.PUBLIC_URL,
                   "protocol_location": rows.get("protocol_location", "")[:100],
-                  "protocol_fonts": {k: _protocol_font(rows, k) for k in DEFAULT_FONT_SIZES}}
+                  "protocol_fonts": {k: _protocol_font(rows, k) for k in DEFAULT_FONT_SIZES},
+                  "protocol_spacing": {k: _protocol_spacing(rows, k) for k in DEFAULT_SPACING}}
         _loaded_at = time.monotonic()
     return _cache
 
@@ -93,7 +104,7 @@ def _set(db: Session, key: str, value: str) -> None:
 def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, remove_logo: bool = False,
          public_url: str | None = None, protocol_logo: tuple[bytes, str] | None = None,
          remove_protocol_logo: bool = False, protocol_location: str | None = None,
-         protocol_fonts: dict[str, float] | None = None) -> None:
+         protocol_fonts: dict[str, float] | None = None, protocol_spacing: dict[str, float] | None = None) -> None:
     """Speichert Schulname, optional Logo(s), QR-Adresse und Protokoll-Einstellungen; committet (auch andere offene
 
     Änderungen derselben Sitzung).
@@ -107,6 +118,9 @@ def save(db: Session, school_name: str, logo: tuple[bytes, str] | None = None, r
     if protocol_fonts:
         for key, value in protocol_fonts.items():
             _set(db, f"protocol_font_{key}", str(value))
+    if protocol_spacing:
+        for key, value in protocol_spacing.items():
+            _set(db, f"protocol_space_{key}", str(value))
     if logo or remove_logo:
         if cfg["logo_id"]:
             db.query(Image).filter(Image.id == cfg["logo_id"]).delete()

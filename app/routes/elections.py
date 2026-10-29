@@ -422,10 +422,13 @@ def protocol(request: Request, election_id: int, db: Session = Depends(get_db), 
 
 @router.get("/elections/{election_id}/protocol-form.pdf")
 def protocol_form(request: Request, election_id: int, witnesses: list[str] = Query(default=[]),
-                  race_id: int | None = None, db: Session = Depends(get_db), user: User = Depends(require_staff)):
+                  layout: str = "einzeln", race_id: str = "", db: Session = Depends(get_db),
+                  user: User = Depends(require_staff)):
     """Wahlprotokoll im Stil des bisherigen Papierformulars (farbiges Logo, Unterschriftsfelder); erst nach Wahlende.
 
-    Ohne `race_id` alle Wahlgänge gesammelt in einem Protokoll, mit `race_id` nur dieser eine Wahlgang.
+    `layout`: "einzeln" (Standard) = jeder Wahlgang auf einem eigenen Blatt mit eigenen Unterschriftsfeldern;
+    "gesammelt" = alle Wahlgänge kompakt hintereinander auf möglichst wenigen Seiten mit EINEM gemeinsamen
+    Unterschriftenblock. `race_id` (optional) beschränkt auf einen einzelnen Wahlgang.
     """
     e = get_election(db, election_id)
     early = _ended_or_redirect(request, e)
@@ -434,12 +437,17 @@ def protocol_form(request: Request, election_id: int, witnesses: list[str] = Que
     cfg = app_settings.get()
     logo = db.get(Image, cfg["protocol_logo_id"]) if cfg["protocol_logo_id"] else None
     results = compute_results(db, e)
-    if race_id is not None:
-        results = [r for r in results if r["race"].id == race_id]
+    if race_id.strip():
+        try:
+            rid = int(race_id)
+        except ValueError:
+            raise HTTPException(400, "Ungültiger Wahlgang") from None
+        results = [r for r in results if r["race"].id == rid]
         if not results:
             raise HTTPException(404, "Wahlgang nicht gefunden")
     pdf = official_protocol_pdf(e, results, cfg["school_name"], logo.data if logo else None,
                                 user.full_name or user.username, witnesses=witnesses,
-                                location=cfg["protocol_location"], font_sizes=cfg["protocol_fonts"])
+                                location=cfg["protocol_location"], font_sizes=cfg["protocol_fonts"],
+                                spacing=cfg["protocol_spacing"], compact=(layout == "gesammelt"))
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": f'inline; filename="protokoll-papierform-{e.id}.pdf"'})

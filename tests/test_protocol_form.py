@@ -271,3 +271,25 @@ def test_runoff_protocol_lists_only_the_two_runoff_candidates(client, db):
     assert "2. Stellvertreter/in" not in text
     # trotz nur 1 Stimme hätte "Clara" (ursprünglich 20 Stimmen) hier nichts verloren - keine Vermischung der Wahlen
     assert "Clara" not in text and "David" not in text
+
+
+def test_protocol_form_accepts_empty_race_id(client, db, election):
+    """Das Dashboard-Formular schickt bei "einzeln" kein race_id mit; eine leere race_id darf nicht 422 auslösen."""
+    token = admin_login(client)
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?race_id=")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?race_id=abc")
+    assert r.status_code == 400
+
+
+def test_protocol_form_compact_layout_has_one_shared_signature_block(client, db, election):
+    token = admin_login(client)
+    client.post(f"/admin/elections/{election.id}/close", data={"csrf_token": token})
+    r = client.get(f"/admin/elections/{election.id}/protocol-form.pdf?layout=gesammelt&witnesses=Max+Beispiel")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    text = _pdf_text(r.content)
+    if text is None:
+        return
+    assert text.count("Wahlleitung:") == 1  # nur EIN gemeinsamer Unterschriftenblock, nicht je Wahlgang
+    assert "Ergebnis der Schulsprecherwahl" in text and "Ergebnis der Abteilungssprecherwahl" in text

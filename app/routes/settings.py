@@ -9,7 +9,7 @@ from .. import images
 from .. import settings as app_settings
 from ..db import get_db
 from ..models import Image
-from ..pdfs import DEFAULT_FONT_SIZES, official_protocol_pdf
+from ..pdfs import DEFAULT_FONT_SIZES, DEFAULT_SPACING, official_protocol_pdf
 from ..security import admin_form, audit, require_admin
 from ..timeutil import utcnow
 from ..web import flash, render
@@ -80,6 +80,16 @@ def _font_from_form(form, key: str) -> float:
     return max(6.0, min(40.0, n))
 
 
+def _spacing_from_form(form, key: str) -> float:
+    """Liest einen Abstand (mm) aus dem Formular; bei ungültiger/fehlender Eingabe der Vorgabewert, sonst 0-30 mm begrenzt."""
+    raw = str(form.get(f"protocol_space_{key}", "")).strip()
+    try:
+        n = float(raw)
+    except ValueError:
+        return DEFAULT_SPACING[key]
+    return max(0.0, min(30.0, n))
+
+
 @router.post("/settings/protocol")
 def protocol_settings_save(request: Request, form=Depends(admin_form), db: Session = Depends(get_db)):
     """Speichert Protokoll-Logo, Ort und Schriftgrößen für das Papierform-Protokoll."""
@@ -92,9 +102,10 @@ def protocol_settings_save(request: Request, form=Depends(admin_form), db: Sessi
         return go("/admin/settings/protocol")
     location = str(form.get("protocol_location", "")).strip()[:100]
     fonts = {key: _font_from_form(form, key) for key in DEFAULT_FONT_SIZES}
+    spacing = {key: _spacing_from_form(form, key) for key in DEFAULT_SPACING}
     app_settings.save(db, app_settings.get()["school_name"], protocol_logo=protocol_logo,
                       remove_protocol_logo=bool(form.get("remove_protocol_logo")), protocol_location=location,
-                      protocol_fonts=fonts)
+                      protocol_fonts=fonts, protocol_spacing=spacing)
     audit(db, request, "settings_changed", "Protokoll-Gestaltung")
     db.commit()
     flash(request, "Protokoll-Einstellungen gespeichert.")
@@ -143,8 +154,10 @@ def protocol_settings_preview(request: Request, form=Depends(admin_form), db: Se
         logo = img.data if img else None
     location = str(form.get("protocol_location", "")).strip()[:100]
     fonts = {key: _font_from_form(form, key) for key in DEFAULT_FONT_SIZES}
+    spacing = {key: _spacing_from_form(form, key) for key in DEFAULT_SPACING}
     election = SimpleNamespace(name="Vorschau", closed_at=utcnow(), end_at=utcnow())
     pdf = official_protocol_pdf(election, _preview_results(), cfg["school_name"], logo, "Mia Mustermann",
-                                witnesses=["Max Beispiel", "Lena Beispiel"], location=location, font_sizes=fonts)
+                                witnesses=["Max Beispiel", "Lena Beispiel"], location=location, font_sizes=fonts,
+                                spacing=spacing)
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": 'inline; filename="protokoll-vorschau.pdf"'})
