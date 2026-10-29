@@ -35,6 +35,14 @@
         <input id="protocol_font_caption" name="protocol_font_caption" type="number" min="6" max="40" step="0.5" value="{{ cfg.protocol_fonts.caption }}"></div>
     </div>
 
+    <label>Abstände (mm)</label>
+    <div class="grid2">
+      <div><label for="protocol_space_heading">Nach einer Überschrift</label>
+        <input id="protocol_space_heading" name="protocol_space_heading" type="number" min="0" max="30" step="0.5" value="{{ cfg.protocol_spacing.heading }}"></div>
+      <div><label for="protocol_space_result">Nach einer Person/einem Ergebnis</label>
+        <input id="protocol_space_result" name="protocol_space_result" type="number" min="0" max="30" step="0.5" value="{{ cfg.protocol_spacing.result }}"></div>
+    </div>
+
     <div class="row gap wrap">
       <button class="btn primary big" type="submit">Speichern</button>
       <button class="btn big" type="submit" formaction="/admin/settings/protocol/preview" formtarget="_blank">Vorschau mit Testdaten</button>

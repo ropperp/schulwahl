@@ -238,22 +238,29 @@ def _sign_box(caption: str, box_h: float, font_size: float) -> list:
            Paragraph(escape(caption) if caption else "&nbsp;", cap_style)]
 
 
-# Schriftgrößen (Punkt), wenn in den Protokoll-Einstellungen nichts anderes hinterlegt ist
+# Schriftgrößen (Punkt) und Abstände (mm), wenn in den Protokoll-Einstellungen nichts anderes hinterlegt ist
 DEFAULT_FONT_SIZES = {"header": 16, "title": 13, "table": 11, "caption": 9}
+DEFAULT_SPACING = {"heading": 1.5, "result": 5}  # "heading" = nach einer Überschrift (vor ihrer Tabelle)
+# "result" = nach einer Person/einem Ergebnis (vor der nächsten Überschrift)
 
 
 def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
                           signed_by: str, witnesses: list[str] | None = None, location: str = "",
-                          font_sizes: dict[str, float] | None = None) -> bytes:
-    """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftsfelder.
+                          font_sizes: dict[str, float] | None = None, spacing: dict[str, float] | None = None,
+                          compact: bool = False) -> bytes:
+    """Wahlprotokoll im Stil des bisherigen Papierformulars, farbiges Logo, Unterschriftsfelder.
 
     Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
     Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
-    Massendruck (dafür gibt es weiterhin `protocol_pdf`). `font_sizes` überschreibt einzelne Werte aus
-    `DEFAULT_FONT_SIZES` (Schlüssel "header"/"title"/"table"/"caption", aus den Protokoll-Einstellungen).
+    Massendruck (dafür gibt es weiterhin `protocol_pdf`). `font_sizes`/`spacing` überschreiben einzelne Werte aus
+    `DEFAULT_FONT_SIZES`/`DEFAULT_SPACING` (aus den Protokoll-Einstellungen). Ohne `compact` (Standard, "einzeln")
+    bekommt jeder Wahlgang sein eigenes Blatt mit Kopf und eigenen Unterschriftsfeldern. Mit `compact=True`
+    ("gesammelt") stehen alle Wahlgänge kompakt hintereinander auf möglichst wenigen Seiten, mit einem gemeinsamen
+    Kopf und EINEM gemeinsamen Unterschriftenblock am Ende.
     """
     witnesses = [w.strip()[:100] for w in (witnesses or []) if w.strip()][:10]
     fonts = {**DEFAULT_FONT_SIZES, **(font_sizes or {})}
+    sp = {**DEFAULT_SPACING, **(spacing or {})}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=16 * mm, bottomMargin=22 * mm, title=f"Wahlprotokoll – {election.name}")
@@ -264,7 +271,7 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
     center_bold_header = ParagraphStyle("center_bold_header", parent=center, fontName="Helvetica-Bold",
                                         fontSize=fonts["header"])
     section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=fonts["table"],
-                             spaceBefore=6, spaceAfter=2)
+                             spaceBefore=6, spaceAfter=0)
 
     def draw_footer(c, _doc):
         """Fußzeile fix am unteren Rand jeder Seite (nicht Teil des fließenden Inhalts)."""
@@ -289,27 +296,53 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
         t.setStyle(mini_style)
         return t
 
-    story = []
-    for i, r in enumerate(results):
-        race = r["race"]
-        header = Table([[logo_drawing or "", Paragraph("Wahlen", center_bold_header), ""]],
-                       colWidths=[40 * mm, 90 * mm, 30 * mm], rowHeights=[20 * mm])
-        header.setStyle(TableStyle([
+    def heading_table(label: str, rows: list[list[str]]) -> list:
+        """Eine Überschrift + ihre Tabelle, mit konfigurierbarem Abstand davor/danach."""
+        return [Paragraph(label, section), Spacer(1, sp["heading"] * mm), mini_table(rows), Spacer(1, sp["result"] * mm)]
+
+    def header_table() -> Table:
+        """Die Kopfbox mit Logo und „Wahlen“ (bleibt mit Rahmen)."""
+        t = Table([[logo_drawing or "", Paragraph("Wahlen", center_bold_header), ""]],
+                  colWidths=[40 * mm, 90 * mm, 30 * mm], rowHeights=[20 * mm])
+        t.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (0, 0), "CENTER"),
         ]))
+        return t
+
+    def signature_block() -> list:
+        """Unterschriftsfelder (Wahlleitung + Wahlzeugen, ab 3 insgesamt 3 nebeneinander) plus Ort/Datum."""
+        signers = [f"Wahlleitung: {signed_by}"] + [f"Wahlzeuge: {w}" for w in witnesses]
+        cols = 3 if len(signers) >= 3 else max(1, len(signers))
+        box_w, box_h = (170 * mm) / cols, 36 * mm
+        sign_rows = []
+        for j in range(0, len(signers), cols):
+            chunk = signers[j:j + cols]
+            cells = [_sign_box(caption, box_h, fonts["caption"]) for caption in chunk]
+            cells += [""] * (cols - len(cells))
+            sign_rows.append(cells)
+        t = Table(sign_rows, colWidths=[box_w] * cols, rowHeights=[box_h] * len(sign_rows), hAlign="LEFT")
+        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                              ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4)]))  # ohne Rahmen
+        date_str = fmt_local(utcnow())[:10]
+        return [t, Spacer(1, 4 * mm), Paragraph(escape(f"{location}, {date_str}" if location else date_str), styles["Normal"])]
+
+    def race_block(r: dict) -> list:
+        """Titel, Platzierungen und ungültige Stimmen eines Wahlgangs (ohne Kopfbox/Unterschriften)."""
+        block = []
+        race = r["race"]
         schuljahr = _schuljahr(election.closed_at or election.end_at)
         if race.department_id is None:
             title_text, subtitle_text = f"Ergebnis der Schulsprecherwahl {schuljahr}", "SchulsprecherIn"
         else:
             title_text, subtitle_text = f"Ergebnis der Abteilungssprecherwahl {schuljahr}", r["department"] or ""
-        story += [header, Spacer(1, 5 * mm), Paragraph(escape(title_text), center_bold)]
+        block.append(Paragraph(escape(title_text), center_bold))
         if subtitle_text:
-            story.append(Paragraph(escape(subtitle_text), center_bold))
+            block.append(Paragraph(escape(subtitle_text), center_bold))
         if race.runoff_kind:
-            story.append(Paragraph("(Stichwahl)", center))
-        story.append(Spacer(1, 4 * mm))
+            block.append(Paragraph("(Stichwahl)", center))
+        block.append(Spacer(1, 4 * mm))
 
         votes_by_id = {row["candidate"].id: row["votes"] for row in r["rows"]}
         shown_ids: set[int] = set()
@@ -320,13 +353,12 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
         if pending_runoff:
             for c in r["plan"]:
                 shown_ids.add(c.id)
-            story.append(Paragraph(f"<strike>Als {escape(race.title)} wurde gewählt</strike>: Stichwahl erforderlich zwischen:",
-                                   section))
-            story.append(mini_table([[c.name, c.info or "", str(votes_by_id[c.id])] for c in r["plan"]]))
+            block += heading_table(f"<strike>Als {escape(race.title)} wurde gewählt</strike>: Stichwahl erforderlich zwischen:",
+                                   [[c.name, c.info or "", str(votes_by_id[c.id])] for c in r["plan"]])
             slot_labels = []  # Stichwahl noch offen: auch die Stellvertretung ist offen, alles andere -> "Weitere Ergebnisse"
         elif not any(row["votes"] > 0 for row in r["rows"]):
-            story.append(Paragraph(f"Als {escape(race.title)} wurde gewählt:", section))
-            story.append(Paragraph("Keine gültigen Stimmen.", styles["Normal"]))
+            block += [Paragraph(f"Als {escape(race.title)} wurde gewählt:", section), Spacer(1, sp["heading"] * mm),
+                     Paragraph("Keine gültigen Stimmen.", styles["Normal"]), Spacer(1, sp["result"] * mm)]
             slot_labels = []
         else:
             slot_labels = [f"Als {escape(race.title)} wurde gewählt:", "1. Stellvertreter/in", "2. Stellvertreter/in"]
@@ -348,33 +380,27 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
             group = groups.pop(0)
             for row in group:
                 shown_ids.add(row["candidate"].id)
-            story.append(Paragraph(label, section))
-            story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in group]))
+            block += heading_table(label, [[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in group])
 
         rest = [row for group in groups for row in group]
         if rest:
-            story.append(Paragraph("Weitere Ergebnisse", section))
-            story.append(mini_table([[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest]))
+            block += heading_table("Weitere Ergebnisse",
+                                   [[row["candidate"].name, row["candidate"].info or "", str(row["votes"])] for row in rest])
 
-        story += [Spacer(1, 3 * mm), Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]),
-                 Spacer(1, 10 * mm)]
+        block.append(Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]))
+        return block
 
-        signers = [f"Wahlleitung: {signed_by}"] + [f"Wahlzeuge: {w}" for w in witnesses]
-        cols = 3 if len(signers) >= 3 else max(1, len(signers))
-        box_w, box_h = (170 * mm) / cols, 36 * mm
-        sign_rows = []
-        for j in range(0, len(signers), cols):
-            chunk = signers[j:j + cols]
-            cells = [_sign_box(caption, box_h, fonts["caption"]) for caption in chunk]
-            cells += [""] * (cols - len(cells))
-            sign_rows.append(cells)
-        t = Table(sign_rows, colWidths=[box_w] * cols, rowHeights=[box_h] * len(sign_rows), hAlign="LEFT")
-        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                              ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4)]))  # ohne Rahmen
-        date_str = fmt_local(utcnow())[:10]
-        story += [t, Spacer(1, 4 * mm), Paragraph(escape(f"{location}, {date_str}" if location else date_str), styles["Normal"])]
-
-        if i < len(results) - 1:
-            story.append(PageBreak())
+    story = []
+    if compact:
+        story += [header_table(), Spacer(1, 5 * mm)]
+        for r in results:
+            story += race_block(r)
+            story.append(Spacer(1, 6 * mm))
+        story += signature_block()
+    else:
+        for i, r in enumerate(results):
+            story += [header_table(), Spacer(1, 5 * mm)] + race_block(r) + [Spacer(1, 6 * mm)] + signature_block()
+            if i < len(results) - 1:
+                story.append(PageBreak())
     doc.build(story, onFirstPage=draw_footer, onLaterPages=draw_footer)
     return buf.getvalue()
