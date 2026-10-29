@@ -228,32 +228,42 @@ def _svg_drawing(svg_bytes: bytes, max_w: float, max_h: float):
     return d
 
 
-def _sign_box(caption: str, box_h: float) -> list:
+def _sign_box(caption: str, box_h: float, font_size: float) -> list:
     """Inhalt einer Unterschriftsbox: leerer Platz zum Unterschreiben, eine Linie, darunter der Name (schwarz, nicht fett)."""
     from reportlab.platypus.flowables import HRFlowable
 
-    cap_style = ParagraphStyle("cap", fontName="Helvetica", fontSize=8.5, textColor=colors.black, leading=10)
+    cap_style = ParagraphStyle("cap", fontName="Helvetica", fontSize=font_size, textColor=colors.black,
+                               leading=font_size + 1.5)
     return [Spacer(1, box_h - 13 * mm), HRFlowable(width="100%", thickness=0.7, color=colors.black, spaceAfter=1.5),
            Paragraph(escape(caption) if caption else "&nbsp;", cap_style)]
 
 
+# Schriftgrößen (Punkt), wenn in den Protokoll-Einstellungen nichts anderes hinterlegt ist
+DEFAULT_FONT_SIZES = {"header": 16, "title": 13, "table": 11, "caption": 9}
+
+
 def official_protocol_pdf(election, results: list[dict], school_name: str, protocol_logo_svg: bytes | None,
-                          signed_by: str, witnesses: list[str] | None = None) -> bytes:
+                          signed_by: str, witnesses: list[str] | None = None, location: str = "",
+                          font_sizes: dict[str, float] | None = None) -> bytes:
     """Wahlprotokoll im Stil des bisherigen Papierformulars: ein Blatt je Wahlgang, farbiges Logo, Unterschriftsfelder.
 
     Anders als `protocol_pdf` (tonersparend, eine Zusammenfassung) ist dieses Protokoll bewusst dem bekannten
     Papierformular nachgebildet - inklusive farbigem Logo. Gedacht zum Unterschreiben/Ablegen, nicht für den
-    Massendruck (dafür gibt es weiterhin `protocol_pdf`).
+    Massendruck (dafür gibt es weiterhin `protocol_pdf`). `font_sizes` überschreibt einzelne Werte aus
+    `DEFAULT_FONT_SIZES` (Schlüssel "header"/"title"/"table"/"caption", aus den Protokoll-Einstellungen).
     """
     witnesses = [w.strip()[:100] for w in (witnesses or []) if w.strip()][:10]
+    fonts = {**DEFAULT_FONT_SIZES, **(font_sizes or {})}
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm,
                             topMargin=16 * mm, bottomMargin=22 * mm, title=f"Wahlprotokoll – {election.name}")
     styles = getSampleStyleSheet()
     center = ParagraphStyle("center", parent=styles["Normal"], alignment=1)
-    center_bold = ParagraphStyle("center_bold", parent=center, fontName="Helvetica-Bold", fontSize=13, leading=16)
-    center_bold_small = ParagraphStyle("center_bold_small", parent=center, fontName="Helvetica-Bold", fontSize=11)
-    section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=10,
+    center_bold = ParagraphStyle("center_bold", parent=center, fontName="Helvetica-Bold", fontSize=fonts["title"],
+                                 leading=fonts["title"] + 3)
+    center_bold_header = ParagraphStyle("center_bold_header", parent=center, fontName="Helvetica-Bold",
+                                        fontSize=fonts["header"])
+    section = ParagraphStyle("section", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=fonts["table"],
                              spaceBefore=6, spaceAfter=2)
 
     def draw_footer(c, _doc):
@@ -266,15 +276,15 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
 
     logo_drawing = _svg_drawing(protocol_logo_svg, 36 * mm, 16 * mm) if protocol_logo_svg else None
     mini_style = TableStyle([
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("FONTSIZE", (0, 0), (-1, -1), fonts["table"]),
         ("ALIGN", (2, 0), (2, -1), "RIGHT"),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ])
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ])  # bewusst ohne Rahmen/Linien
 
     def mini_table(rows: list[list[str]]) -> Table:
-        """Name/Klasse/Stimmen-Tabelle; ohne Datenzeilen bleiben nur die Spaltentitel übrig (wie im Papierformular)."""
+        """Name/Klasse/Stimmen-Tabelle ohne Rahmen; ohne Datenzeilen bleiben nur die Spaltentitel übrig."""
         t = Table([["Name", "Klasse", "Stimmen"], *rows], colWidths=[85 * mm, 35 * mm, 25 * mm], hAlign="LEFT")
         t.setStyle(mini_style)
         return t
@@ -282,16 +292,21 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
     story = []
     for i, r in enumerate(results):
         race = r["race"]
-        header = Table([[logo_drawing or "", Paragraph("Wahlen", center_bold_small), ""]],
+        header = Table([[logo_drawing or "", Paragraph("Wahlen", center_bold_header), ""]],
                        colWidths=[40 * mm, 90 * mm, 30 * mm], rowHeights=[20 * mm])
         header.setStyle(TableStyle([
             ("GRID", (0, 0), (-1, -1), 0.6, colors.black),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ("ALIGN", (0, 0), (0, 0), "CENTER"),
         ]))
-        story += [header, Spacer(1, 5 * mm), Paragraph(f"Ergebnis: {escape(race.title)}", center_bold)]
-        if r["department"]:
-            story.append(Paragraph(escape(r["department"]), center_bold))
+        schuljahr = _schuljahr(election.closed_at or election.end_at)
+        if race.department_id is None:
+            title_text, subtitle_text = f"Ergebnis der Schulsprecherwahl {schuljahr}", "SchulsprecherIn"
+        else:
+            title_text, subtitle_text = f"Ergebnis der Abteilungssprecherwahl {schuljahr}", r["department"] or ""
+        story += [header, Spacer(1, 5 * mm), Paragraph(escape(title_text), center_bold)]
+        if subtitle_text:
+            story.append(Paragraph(escape(subtitle_text), center_bold))
         if race.runoff_kind:
             story.append(Paragraph("(Stichwahl)", center))
         story.append(Spacer(1, 4 * mm))
@@ -344,20 +359,20 @@ def official_protocol_pdf(election, results: list[dict], school_name: str, proto
         story += [Spacer(1, 3 * mm), Paragraph(f"<b>ungültige Stimmen:</b> {r['invalid']}", styles["Normal"]),
                  Spacer(1, 10 * mm)]
 
-        box_w, box_h = 58 * mm, 36 * mm
         signers = [f"Wahlleitung: {signed_by}"] + [f"Wahlzeuge: {w}" for w in witnesses]
+        cols = 3 if len(signers) >= 3 else max(1, len(signers))
+        box_w, box_h = (170 * mm) / cols, 36 * mm
         sign_rows = []
-        for j in range(0, len(signers), 2):
-            pair = signers[j:j + 2]
-            cells = [_sign_box(caption, box_h) for caption in pair]
-            if len(cells) == 1:
-                cells.append("")
+        for j in range(0, len(signers), cols):
+            chunk = signers[j:j + cols]
+            cells = [_sign_box(caption, box_h, fonts["caption"]) for caption in chunk]
+            cells += [""] * (cols - len(cells))
             sign_rows.append(cells)
-        t = Table(sign_rows, colWidths=[box_w, box_w], rowHeights=[box_h] * len(sign_rows), hAlign="LEFT")
-        t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.6, colors.black), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                              ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                              ("TOPPADDING", (0, 0), (-1, -1), 4)]))
-        story += [t, Spacer(1, 4 * mm), Paragraph(f"Datum: {fmt_local(utcnow())[:10]}", styles["Normal"])]
+        t = Table(sign_rows, colWidths=[box_w] * cols, rowHeights=[box_h] * len(sign_rows), hAlign="LEFT")
+        t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                              ("RIGHTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 4)]))  # ohne Rahmen
+        date_str = fmt_local(utcnow())[:10]
+        story += [t, Spacer(1, 4 * mm), Paragraph(escape(f"{location}, {date_str}" if location else date_str), styles["Normal"])]
 
         if i < len(results) - 1:
             story.append(PageBreak())

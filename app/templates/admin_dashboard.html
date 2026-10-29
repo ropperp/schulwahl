@@ -16,6 +16,13 @@
     <details class="inlinedet">
       <summary class="btn">📄 Protokoll (Papierform)</summary>
       <form method="get" action="/admin/elections/{{ e.id }}/protocol-form.pdf" target="_blank" class="editform">
+        <label for="race_id">Wahlgänge</label>
+        <select id="race_id" name="race_id">
+          <option value="">Gesammelt in einem Protokoll</option>
+          {% for race in e.races %}
+          <option value="{{ race.id }}">Einzeln: {{ race.title }}{% if race.department %} ({{ race.department.name }}){% endif %}</option>
+          {% endfor %}
+        </select>
         <p class="muted small">Wer hat beim Auszählen geholfen (Wahlzeugen)? Name reicht, wird mit auf das Protokoll gedruckt. Leere Felder bleiben weg.</p>
         {% for i in range(1, 7) %}
         <label for="w{{ i }}">Wahlzeuge {{ i }}</label><input id="w{{ i }}" name="witnesses" placeholder="Name">
